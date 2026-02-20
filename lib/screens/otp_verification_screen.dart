@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../core/assets.dart';
 import '../widgets/app_header.dart';
 import '../widgets/primary_button.dart';
 
@@ -10,7 +11,10 @@ class OtpVerificationScreen extends StatefulWidget {
 }
 
 class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
-  final List<TextEditingController> otpCtrls = List.generate(4, (_) => TextEditingController());
+  final List<TextEditingController> otpCtrls = List.generate(
+    4,
+    (_) => TextEditingController(),
+  );
 
   @override
   void dispose() {
@@ -40,7 +44,10 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: () => Navigator.pop(context)),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.pop(context),
+        ),
       ),
       body: SafeArea(
         child: Padding(
@@ -49,7 +56,19 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const AppHeader(title: "Worker Verification"),
-              const Text("Enter the verification code sent to your phone.", style: TextStyle(color: Colors.black54)),
+              const SizedBox(height: 12),
+              Center(
+                child: Image.asset(
+                  AppAssets.workerVerificationPage1,
+                  height: 150,
+                  fit: BoxFit.cover,
+                ),
+              ),
+              const SizedBox(height: 20),
+              const Text(
+                "Enter the verification code sent to your phone.",
+                style: TextStyle(color: Colors.black54),
+              ),
               const SizedBox(height: 18),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
