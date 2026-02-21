@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../core/assets.dart';
 
 class WorkerHomeScreen extends StatefulWidget {
   const WorkerHomeScreen({super.key});
@@ -30,10 +29,6 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
         child: ListView(
           padding: const EdgeInsets.all(18),
           children: [
-            Image.asset(AppAssets.welcomePage, height: 180, fit: BoxFit.cover),
-            const SizedBox(height: 14),
-            Center(child: Image.asset(AppAssets.welcomeLogo, height: 100)),
-            const SizedBox(height: 20),
             _earningsCard(context),
             const SizedBox(height: 14),
             _tabs(),
