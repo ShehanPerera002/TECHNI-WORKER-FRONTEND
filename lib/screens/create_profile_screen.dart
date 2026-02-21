@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../core/assets.dart';
 import '../widgets/app_header.dart';
 import '../widgets/input_field.dart';
 import '../widgets/primary_button.dart';
@@ -61,51 +60,38 @@ class _CreateProfileScreenState extends State<CreateProfileScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const AppHeader(title: "Create Your Profile"),
-              const SizedBox(height: 6),
+              const SizedBox(height: 20),
 
-              /// Profile Image with Edit Icon
+              /// 🔵 EMPTY PROFILE CIRCLE (same as prototype)
               Center(
                 child: Column(
                   children: [
-                    Stack(
-                      alignment: Alignment.bottomRight,
-                      children: [
-                        Container(
-                          height: 100,
-                          width: 100,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            border: Border.all(color: Colors.black12),
-                            image: DecorationImage(
-                              image: AssetImage(AppAssets.profilePhoto),
-                              fit: BoxFit.cover,
-                            ),
-                          ),
-                        ),
-                        Container(
-                          height: 28,
-                          width: 28,
-                          decoration: const BoxDecoration(
-                            color: Color(0xFF2563EB),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(
-                            Icons.edit,
-                            size: 16,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ],
+                    Container(
+                      height: 110,
+                      width: 110,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.black26),
+                      ),
+                      child: const Icon(
+                        Icons.person,
+                        size: 50,
+                        color: Colors.black38,
+                      ),
                     ),
-                    TextButton(
-                      onPressed: () {},
-                      child: const Text("Upload Profile Photo"),
+                    const SizedBox(height: 8),
+                    const Text(
+                      "Upload Profile Photo",
+                      style: TextStyle(
+                        color: Color(0xFF2563EB),
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ],
                 ),
               ),
 
-              const SizedBox(height: 10),
+              const SizedBox(height: 20),
 
               InputField(label: "Full Name", controller: nameCtrl),
               const SizedBox(height: 12),
