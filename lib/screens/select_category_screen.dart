@@ -129,7 +129,13 @@ class _SelectCategoryScreenState extends State<SelectCategoryScreen> {
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.pop(context),
+          onPressed: () {
+            if (Navigator.canPop(context)) {
+              Navigator.pop(context);
+            } else {
+              Navigator.pushNamedAndRemoveUntil(context, '/profile', (route) => false);
+            }
+          },
         ),
       ),
       body: SafeArea(
