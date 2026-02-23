@@ -22,7 +22,13 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.pop(context),
+          onPressed: () {
+            if (Navigator.canPop(context)) {
+              Navigator.pop(context);
+            } else {
+              Navigator.pushNamedAndRemoveUntil(context, '/category', (route) => false);
+            }
+          },
         ),
         title: const Text("Worker home screen"),
         centerTitle: false,
