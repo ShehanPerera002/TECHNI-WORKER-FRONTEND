@@ -8,6 +8,7 @@ class VerifiedScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.white,
       // 🔵 Back arrow
       appBar: AppBar(
         backgroundColor: Colors.transparent,
