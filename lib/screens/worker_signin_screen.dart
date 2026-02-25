@@ -3,6 +3,7 @@ import 'package:flutter/gestures.dart';
 import '../core/assets.dart';
 import '../widgets/input_field.dart';
 import '../widgets/primary_button.dart';
+import '../services/auth_service.dart';
 
 class WorkerSignInScreen extends StatefulWidget {
   const WorkerSignInScreen({super.key});
@@ -13,11 +14,55 @@ class WorkerSignInScreen extends StatefulWidget {
 
 class _WorkerSignInScreenState extends State<WorkerSignInScreen> {
   final phoneCtrl = TextEditingController();
+  final AuthService _authService = AuthService();
+  bool _isLoading = false;
+  String? _error;
 
   @override
   void dispose() {
     phoneCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _sendOTP() async {
+    if (phoneCtrl.text.isEmpty) {
+      setState(() => _error = 'Please enter your phone number');
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
+    try {
+      // Format phone number with country code if not present
+      String phoneNumber = phoneCtrl.text.trim();
+      if (!phoneNumber.startsWith('+')) {
+        phoneNumber = '+92${phoneNumber.replaceFirst('0', '')}'; // Pakistan code
+      }
+
+      await _authService.sendOTP(phoneNumber);
+
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('OTP sent successfully!')),
+        );
+        // Navigate to OTP verification screen
+        Navigator.pushNamed(context, '/otp', arguments: phoneNumber);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _error = 'Error: ${e.toString()}';
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to send OTP: $e')),
+        );
+      }
+    }
   }
 
   @override
@@ -100,9 +145,19 @@ class _WorkerSignInScreenState extends State<WorkerSignInScreen> {
 
                   /// Button
                   PrimaryButton(
-                    text: "Continue",
-                    onPressed: () => Navigator.pushNamed(context, '/otp'),
+                    text: _isLoading ? "Sending..." : "Continue",
+                    onPressed: _isLoading ? () {} : _sendOTP,
                   ),
+
+                  if (_error != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 12),
+                      child: Text(
+                        _error!,
+                        style: const TextStyle(color: Colors.red, fontSize: 14),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
 
                   const Spacer(),
 
