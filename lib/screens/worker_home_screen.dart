@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+
 class WorkerHomeScreen extends StatefulWidget {
   const WorkerHomeScreen({super.key});
 
@@ -17,10 +18,17 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.white,
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.pop(context),
+          onPressed: () {
+            if (Navigator.canPop(context)) {
+              Navigator.pop(context);
+            } else {
+              Navigator.pushNamedAndRemoveUntil(context, '/category', (route) => false);
+            }
+          },
         ),
         title: const Text("Worker home screen"),
         centerTitle: false,

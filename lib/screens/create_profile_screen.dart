@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../widgets/app_header.dart';
 import '../widgets/input_field.dart';
 import '../widgets/primary_button.dart';
+import '../services/upload_service.dart';
 
 class CreateProfileScreen extends StatefulWidget {
   const CreateProfileScreen({super.key});
@@ -15,6 +17,25 @@ class _CreateProfileScreenState extends State<CreateProfileScreen> {
   final ageCtrl = TextEditingController();
   final nicCtrl = TextEditingController();
 
+  final UploadService _uploadService = UploadService();
+  bool _uploadingProfile = false;
+  bool _uploadingNICFront = false;
+  bool _uploadingNICBack = false;
+
+  Future<String> _getAuthToken() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      throw Exception('Please sign in first');
+    }
+
+    final token = await user.getIdToken();
+    if (token == null || token.isEmpty) {
+      throw Exception('Failed to get auth token');
+    }
+
+    return token;
+  }
+
   @override
   void dispose() {
     nameCtrl.dispose();
@@ -23,7 +44,7 @@ class _CreateProfileScreenState extends State<CreateProfileScreen> {
     super.dispose();
   }
 
-  Widget uploadBox(String text) {
+  Widget uploadBox(String text, bool isUploading, VoidCallback onTap) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(14),
@@ -38,19 +59,119 @@ class _CreateProfileScreenState extends State<CreateProfileScreen> {
           Expanded(
             child: Text(text, style: const TextStyle(color: Colors.black54)),
           ),
-          TextButton(onPressed: () {}, child: const Text("Upload")),
+          TextButton(
+            onPressed: isUploading ? null : onTap,
+            child: isUploading
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Text("Upload"),
+          ),
         ],
       ),
     );
   }
 
+  Future<void> _pickAndUploadProfile() async {
+    try {
+      final pickedFile = await _uploadService.pickImage();
+      if (pickedFile != null) {
+        setState(() => _uploadingProfile = true);
+
+        final token = await _getAuthToken();
+        await _uploadService.uploadProfileImage(pickedFile, token);
+
+        if (mounted) {
+          setState(() => _uploadingProfile = false);
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Profile photo uploaded successfully!'),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _uploadingProfile = false);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to upload: $e')));
+      }
+    }
+  }
+
+  Future<void> _pickAndUploadNIC(String side) async {
+    try {
+      final pickedFile = await _uploadService.pickImage();
+      if (pickedFile != null) {
+        setState(() {
+          if (side == 'front') {
+            _uploadingNICFront = true;
+          } else {
+            _uploadingNICBack = true;
+          }
+        });
+
+        final token = await _getAuthToken();
+        await _uploadService.uploadNIC(pickedFile, token, side: side);
+
+        if (mounted) {
+          setState(() {
+            if (side == 'front') {
+              _uploadingNICFront = false;
+            } else {
+              _uploadingNICBack = false;
+            }
+          });
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                side == 'front'
+                    ? 'NIC front photo uploaded successfully!'
+                    : 'NIC back photo uploaded successfully!',
+              ),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          if (side == 'front') {
+            _uploadingNICFront = false;
+          } else {
+            _uploadingNICBack = false;
+          }
+        });
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to upload: $e')));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.white,
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.pop(context),
+          onPressed: () {
+            if (Navigator.canPop(context)) {
+              Navigator.pop(context);
+            } else {
+              Navigator.pushNamedAndRemoveUntil(
+                context,
+                '/verified',
+                (route) => false,
+              );
+            }
+          },
         ),
       ),
       body: SafeArea(
@@ -64,30 +185,37 @@ class _CreateProfileScreenState extends State<CreateProfileScreen> {
 
               /// 🔵 EMPTY PROFILE CIRCLE (same as prototype)
               Center(
-                child: Column(
-                  children: [
-                    Container(
-                      height: 110,
-                      width: 110,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.black26),
+                child: GestureDetector(
+                  onTap: _uploadingProfile ? null : _pickAndUploadProfile,
+                  child: Column(
+                    children: [
+                      Container(
+                        height: 110,
+                        width: 110,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.black26),
+                        ),
+                        child: _uploadingProfile
+                            ? const CircularProgressIndicator()
+                            : const Icon(
+                                Icons.person,
+                                size: 50,
+                                color: Colors.black38,
+                              ),
                       ),
-                      child: const Icon(
-                        Icons.person,
-                        size: 50,
-                        color: Colors.black38,
+                      const SizedBox(height: 8),
+                      Text(
+                        _uploadingProfile
+                            ? "Uploading..."
+                            : "Upload Profile Photo",
+                        style: const TextStyle(
+                          color: Color(0xFF2563EB),
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      "Upload Profile Photo",
-                      style: TextStyle(
-                        color: Color(0xFF2563EB),
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
 
@@ -106,7 +234,18 @@ class _CreateProfileScreenState extends State<CreateProfileScreen> {
               InputField(label: "NIC Number", controller: nicCtrl),
               const SizedBox(height: 12),
 
-              uploadBox("Upload a photo of NIC (JPG/PNG)"),
+              uploadBox(
+                "Upload NIC Front Photo (JPG/PNG)",
+                _uploadingNICFront,
+                () => _pickAndUploadNIC('front'),
+              ),
+              const SizedBox(height: 12),
+
+              uploadBox(
+                "Upload NIC Back Photo (JPG/PNG)",
+                _uploadingNICBack,
+                () => _pickAndUploadNIC('back'),
+              ),
               const SizedBox(height: 12),
 
               const Text(
