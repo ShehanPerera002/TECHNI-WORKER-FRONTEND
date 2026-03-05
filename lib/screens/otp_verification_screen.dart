@@ -48,7 +48,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
 
   @override
   void dispose() {
-    for (var c in otpCtrls) {
+    for (final c in otpCtrls) {
       c.dispose();
     }
     for (final f in otpFocusNodes) {
@@ -163,22 +163,12 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
             borderSide: const BorderSide(color: Color(0xFF2563EB), width: 2),
           ),
         ),
-        onChanged: (value) {
-          if (value.isNotEmpty && index < 5) {
-            focusNodes[index + 1].requestFocus();
-          } else if (value.isEmpty && index > 0) {
-            focusNodes[index - 1].requestFocus();
-          }
-        },
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-
-    final String verificationId = ModalRoute.of(context)!.settings.arguments as String;
-
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
