@@ -21,6 +21,15 @@ This repository is the frontend app only. It integrates with Firebase and a sepa
 	- Weekly earnings card
 	- New job requests tab
 	- Scheduled jobs tab
+	- Accept/decline job actions with live tab updates
+	- Clickable job cards with Job Details screen navigation
+	- Pull-to-refresh and notification badge for new requests
+- Earnings details dashboard:
+	- Today, week, and month summaries
+	- Completed jobs list and total completed earnings
+- OTP UX improvements:
+	- One-by-one digit deletion using backspace
+	- Auto-focus forward on input and backward on delete
 
 ## Tech Stack
 
@@ -59,6 +68,8 @@ lib/
 		theme.dart
 	core/
 		assets.dart
+	models/
+		job_model.dart
 	screens/
 		welcome_screen.dart
 		worker_signin_screen.dart
@@ -67,8 +78,11 @@ lib/
 		create_profile_screen.dart
 		select_category_screen.dart
 		worker_home_screen.dart
+		earnings_details_screen.dart
+		job_details_screen.dart
 	services/
 		auth_service.dart
+		job_service.dart
 		upload_service.dart
 	widgets/
 ```
@@ -193,7 +207,7 @@ flutter build web --release
 
 ## Known Gaps
 
-- Worker home data is still mock/sample UI data.
+- Worker/job data is currently in-memory sample data (`JobService`) and not yet synced with backend APIs.
 - Windows/Linux Firebase config is not yet generated.
 - Certification upload API endpoint (`/document`) is not yet implemented on backend.
 
