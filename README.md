@@ -1,63 +1,55 @@
 # TECHNI Worker Frontend
 
-TECHNI Worker Frontend is a Flutter mobile application for skilled workers (plumbers, electricians, carpenters, painters, and others) to sign in with phone OTP, complete onboarding, upload profile/NIC files, and manage incoming work.
+Flutter application for the worker-side experience in TECHNI (phone OTP login, onboarding, profile setup, uploads, and job management UI).
 
-This repository is the frontend app only. It integrates with Firebase and a separate backend API service.
+This folder (`TECHNI-WORKER`) contains only the frontend app. Backend APIs are in the sibling folder `TECHNI-WORKER_BACKEND-`.
 
 ## Features
 
-- Phone sign-in and OTP verification using Firebase Authentication
+- Firebase phone authentication (OTP send/verify/resend)
 - Worker onboarding flow:
-	- Welcome screen
-	- Sign-in screen
+	- Welcome
+	- Sign in
 	- OTP verification
-	- Profile creation (name, age, NIC)
+	- Verified screen
+	- Create profile
 	- Category selection
-- File uploads:
-	- Profile image
-	- NIC front and NIC back images
-	- Certification document picker (UI flow)
-- Worker home UI:
+- Worker home experience:
 	- Weekly earnings card
-	- New job requests tab
-	- Scheduled jobs tab
-	- Accept/decline job actions with live tab updates
-	- Clickable job cards with Job Details screen navigation
-	- Pull-to-refresh and notification badge for new requests
-- Earnings details dashboard:
-	- Today, week, and month summaries
-	- Completed jobs list and total completed earnings
-- OTP UX improvements:
-	- One-by-one digit deletion using backspace
-	- Auto-focus forward on input and backward on delete
+	- New job requests and scheduled jobs tabs
+	- Accept/decline actions
+	- Pull-to-refresh
+	- Job details and earnings details screens
+- File selection/upload support:
+	- Profile image upload
+	- NIC image upload (front/back)
+	- Document picker flow
 
 ## Tech Stack
 
-Frontend:
-
 - Flutter (Dart SDK `^3.10.4`)
-- Firebase Core/Auth/Firestore/Storage/Messaging
-- Dio for API communication
-- `image_picker` and `file_picker` for media/document selection
+- Firebase:
+	- `firebase_core`
+	- `firebase_auth`
+	- `cloud_firestore`
+	- `firebase_storage`
+	- `firebase_messaging`
+- Networking: `dio`
+- Media and docs: `image_picker`, `file_picker`
 
-Backend integration (separate repository/folder):
-
-- Node.js + Express
-- Firebase Admin SDK
-- Multer (file upload middleware)
-- Optional MongoDB connection support
-
-## App Navigation Flow
+## App Routes
 
 Defined in `lib/app/routes.dart`:
 
-- `/` -> Welcome
-- `/signin` -> Worker sign-in
-- `/otp` -> OTP verification
-- `/verified` -> Verified screen
-- `/profile` -> Create profile
-- `/category` -> Select category
-- `/home` -> Worker home
+- `/` -> `WelcomeScreen`
+- `/signin` -> `WorkerSignInScreen`
+- `/otp` -> `OtpVerificationScreen`
+- `/verified` -> `VerifiedScreen`
+- `/profile` -> `CreateProfileScreen`
+- `/category` -> `SelectCategoryScreen`
+- `/terms` -> `TermsScreen`
+- `/privacy` -> `PrivacyScreen`
+- `/home` -> `WorkerHomeScreen`
 
 ## Project Structure
 
@@ -65,164 +57,130 @@ Defined in `lib/app/routes.dart`:
 lib/
 	app/
 		routes.dart
+		techni_worker_app.dart
 		theme.dart
 	core/
 		assets.dart
 	models/
 		job_model.dart
-	screens/
-		welcome_screen.dart
-		worker_signin_screen.dart
-		otp_verification_screen.dart
-		verified_screen.dart
-		create_profile_screen.dart
-		select_category_screen.dart
-		worker_home_screen.dart
-		earnings_details_screen.dart
-		job_details_screen.dart
 	services/
 		auth_service.dart
 		job_service.dart
 		upload_service.dart
+		screens/
+			create_profile_screen.dart
+			earnings_details_screen.dart
+			job_details_screen.dart
+			otp_verification_screen.dart
+			privacy_screen.dart
+			select_category_screen.dart
+			terms_screen.dart
+			verified_screen.dart
+			welcome_screen.dart
+			worker_home_screen.dart
+			worker_signin_screen.dart
 	widgets/
+		app_header.dart
+		input_field.dart
+		primary_button.dart
+	firebase_options.dart
+	main.dart
 ```
 
-## Firebase Configuration (Frontend)
+## Prerequisites
 
-- Firebase app init is done in `lib/main.dart`.
-- Platform options are in `lib/firebase_options.dart`.
-- Android config file exists at `android/app/google-services.json`.
-
-Current platform support in this repo:
-
-- Configured: Android, Web, iOS, macOS
-- Not configured: Windows, Linux (throws `UnsupportedError`)
-
-If you need to regenerate Firebase config:
-
-```bash
-flutterfire configure
-```
-
-## Backend Integration
-
-The app upload service (`lib/services/upload_service.dart`) calls worker endpoints under:
-
-- Android emulator default: `http://10.0.2.2:5000/api/workers`
-- Web/other platforms default: `http://localhost:5000/api/workers`
-
-Override backend URL at runtime:
-
-```bash
-flutter run --dart-define=API_BASE_URL=https://your-domain.com/api/workers
-```
-
-Auth integration details:
-
-- Frontend signs in via Firebase phone auth and obtains Firebase ID token.
-- Token is sent as `Authorization: Bearer <token>` for protected backend routes.
-- Backend verifies token using Firebase Admin middleware.
-
-## Backend API Used By Frontend
-
-Based on current routes in `TECHNI-WORKER_BACKEND-/src/routes/workerRoutes.js`:
-
-- `POST /api/workers/profile` -> create worker profile
-- `GET /api/workers/me` -> get current worker profile
-- `PATCH /api/workers/nic-number` -> update NIC number
-- `POST /api/workers/profile-image` -> upload profile image (`multipart/form-data`, field: `image`)
-- `POST /api/workers/nic-image` -> upload NIC image (`multipart/form-data`, fields: `image`, `side`)
-- `GET /api/health` -> server health check
-
-Important note:
-
-- Frontend has `uploadDocument()` in `UploadService` calling `POST /api/workers/document`.
-- This route is not present in current backend routes, so certification upload is currently picker/UI only unless backend adds that endpoint.
-
-## Running With Local Backend
-
-If you run the backend locally from `TECHNI-WORKER_BACKEND-`:
-
-1. Install dependencies:
-
-```bash
-npm install
-```
-
-2. Create `.env` and set required values.
-
-Suggested backend environment variables (from backend code):
-
-- `PORT=5000`
-- `NODE_ENV=development`
-- `ALLOWED_ORIGINS=*` or comma-separated origins
-- `FIREBASE_STORAGE_BUCKET=project-techni.appspot.com`
-- `FIREBASE_SERVICE_ACCOUNT_JSON={...}` or provide `src/config/serviceAccountKey.json`
-- `ALLOW_DEV_AUTH_BYPASS=true` (dev-only option for API testing)
-- `ENABLE_MONGODB=true` and `MONGODB_URI=...` (optional, if MongoDB needed)
-
-3. Start backend server:
-
-```bash
-npm run dev
-```
-
-Server default base URL:
-
-- `http://localhost:5000`
+- Flutter SDK installed
+- Dart SDK compatible with `^3.10.4`
+- Android Studio/Xcode (depending on target platform)
+- Firebase project configured for this app
 
 ## Frontend Setup
 
-1. Install Flutter dependencies:
+1. Install dependencies:
 
 ```bash
 flutter pub get
 ```
 
-2. Run app:
+2. Run the app:
 
 ```bash
 flutter run
 ```
 
-3. Optional custom backend URL:
+3. Run with custom backend base URL (optional):
 
 ```bash
 flutter run --dart-define=API_BASE_URL=http://10.0.2.2:5000/api/workers
 ```
 
+## Backend Integration
+
+`lib/services/upload_service.dart` uses this default logic:
+
+- Android emulator: `http://10.0.2.2:5000/api/workers`
+- Web/other: `http://localhost:5000/api/workers`
+
+Use `API_BASE_URL` to override in any environment.
+
+### Authentication Flow
+
+- Frontend signs in with Firebase Phone Auth.
+- Firebase ID token is attached to protected API requests:
+	- `Authorization: Bearer <firebase_id_token>`
+- Backend validates token using Firebase Admin middleware.
+
+### Backend Endpoints Used
+
+Based on `TECHNI-WORKER_BACKEND-/src/routes/workerRoutes.js`:
+
+- `POST /api/workers/profile`
+- `GET /api/workers/me`
+- `PATCH /api/workers/nic-number`
+- `POST /api/workers/profile-image` (`multipart/form-data`, field: `image`)
+- `POST /api/workers/nic-image` (`multipart/form-data`, fields: `image`, `side`)
+
+Note:
+
+- Frontend currently has `uploadDocument()` calling `POST /api/workers/document`.
+- That route is not available in current backend routes, so document upload needs backend support to be fully functional.
+
+## Firebase Configuration
+
+- Firebase is initialized in `lib/main.dart`.
+- Platform config lives in `lib/firebase_options.dart`.
+- Android config file: `android/app/google-services.json`.
+
+If Firebase settings change, regenerate config with FlutterFire CLI:
+
+```bash
+flutterfire configure
+```
+
 ## Build Commands
 
-Android APK:
+- Android APK:
 
 ```bash
 flutter build apk --release
 ```
 
-Web:
+- Web build:
 
 ```bash
 flutter build web --release
 ```
 
-## Known Gaps
+## Current Limitations
 
-- Worker/job data is currently in-memory sample data (`JobService`) and not yet synced with backend APIs.
-- Windows/Linux Firebase config is not yet generated.
-- Certification upload API endpoint (`/document`) is not yet implemented on backend.
+- `JobService` currently uses in-memory sample data (not backend-synced yet).
+- Document upload API route (`/api/workers/document`) is missing in backend.
 
-## Contributing
+## Related Repositories/Folders
 
-1. Create a branch from main.
-2. Keep commits focused and descriptive.
-3. For UI changes, include screenshots in PR.
-4. For API changes, update this README endpoint section.
-
-## Repository Scope
-
-- This repo contains the Flutter frontend app.
-- Backend service code lives in `TECHNI-WORKER_BACKEND-`.
+- Frontend: `TECHNI-WORKER`
+- Backend: `TECHNI-WORKER_BACKEND-`
 
 ## License
 
-Private/internal by default (`publish_to: none` in `pubspec.yaml`).
+Private/internal project (`publish_to: none`).
