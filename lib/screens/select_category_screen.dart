@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
+
 import '../widgets/app_header.dart';
 import '../widgets/primary_button.dart';
 
@@ -24,7 +26,7 @@ class _SelectCategoryScreenState extends State<SelectCategoryScreen> {
   ];
 
   final UploadService _uploadService = UploadService();
-  String? _uploadedFileName;
+  List<PlatformFile> _certFiles = [];
   bool _uploading = false;
 
   Widget categoryTile(String name) {
@@ -65,18 +67,21 @@ class _SelectCategoryScreenState extends State<SelectCategoryScreen> {
   Future<void> _pickAndUploadDocument() async {
     setState(() => _uploading = true);
     try {
-      final pickedFile = await _uploadService.pickDocument();
-      if (pickedFile != null) {
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        allowMultiple: true,
+        type: FileType.custom,
+        allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png'],
+      );
+
+      if (result != null && result.files.isNotEmpty) {
         setState(() {
-          _uploadedFileName = pickedFile.name;
+          _certFiles = result.files;
         });
-        // Optionally upload to backend here:
-        // await _uploadService.uploadDocument(pickedFile, 'your_token');
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to pick document: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to pick document: $e')));
     } finally {
       setState(() => _uploading = false);
     }
@@ -129,25 +134,31 @@ class _SelectCategoryScreenState extends State<SelectCategoryScreen> {
             ),
           ),
           const SizedBox(height: 10),
-          if (_uploadedFileName != null)
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(8),
-                color: const Color(0xFFF7F9FF),
+          if (_certFiles.isNotEmpty) ...[
+            for (final file in _certFiles)
+              Container(
+                padding: const EdgeInsets.all(10),
+                margin: const EdgeInsets.only(bottom: 6),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(8),
+                  color: const Color(0xFFF7F9FF),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.insert_drive_file,
+                      color: Color(0xFF2563EB),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text(file.name)),
+                    GestureDetector(
+                      onTap: () => setState(() => _certFiles.remove(file)),
+                      child: const Icon(Icons.delete, size: 18),
+                    ),
+                  ],
+                ),
               ),
-              child: Row(
-                children: [
-                  const Icon(Icons.insert_drive_file, color: Color(0xFF2563EB)),
-                  const SizedBox(width: 8),
-                  Expanded(child: Text(_uploadedFileName!)),
-                  GestureDetector(
-                    onTap: () => setState(() => _uploadedFileName = null),
-                    child: const Icon(Icons.delete, size: 18),
-                  ),
-                ],
-              ),
-            ),
+          ],
         ],
       ),
     );
@@ -164,7 +175,11 @@ class _SelectCategoryScreenState extends State<SelectCategoryScreen> {
             if (Navigator.canPop(context)) {
               Navigator.pop(context);
             } else {
-              Navigator.pushNamedAndRemoveUntil(context, '/profile', (route) => false);
+              Navigator.pushNamedAndRemoveUntil(
+                context,
+                '/profile',
+                (route) => false,
+              );
             }
           },
         ),

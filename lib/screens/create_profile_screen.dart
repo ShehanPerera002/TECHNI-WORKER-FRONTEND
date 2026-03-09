@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:file_picker/file_picker.dart';
 import '../widgets/app_header.dart';
 import '../widgets/input_field.dart';
 import '../widgets/primary_button.dart';
@@ -21,6 +22,10 @@ class _CreateProfileScreenState extends State<CreateProfileScreen> {
   bool _uploadingProfile = false;
   bool _uploadingNICFront = false;
   bool _uploadingNICBack = false;
+
+
+  bool _uploadingPolice = false;
+  PlatformFile? _policeCertFile;
 
   Future<String> _getAuthToken() async {
     final user = FirebaseAuth.instance.currentUser;
@@ -154,6 +159,35 @@ class _CreateProfileScreenState extends State<CreateProfileScreen> {
     }
   }
 
+  /// pick a single police certificate (pdf/image) and optionally upload
+  Future<void> _pickAndUploadPoliceCertificates() async {
+    try {
+      setState(() => _uploadingPolice = true);
+
+      // use upload service which already handles a single document
+      final picked = await _uploadService.pickDocument();
+      if (picked != null) {
+        setState(() => _policeCertFile = picked);
+        // optional: upload immediately
+        // final token = await _getAuthToken();
+        // await _uploadService.uploadDocument(picked, token);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Certificate selected successfully!')),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to pick file: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _uploadingPolice = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -247,6 +281,44 @@ class _CreateProfileScreenState extends State<CreateProfileScreen> {
                 () => _pickAndUploadNIC('back'),
               ),
               const SizedBox(height: 12),
+
+              // police certificate section
+              uploadBox(
+                "Police Character Certificate (PDF/JPG/PNG)",
+                _uploadingPolice,
+                _pickAndUploadPoliceCertificates,
+              ),
+              const SizedBox(height: 8),
+              if (_policeCertFile != null) ...[
+                Container(
+                  margin: const EdgeInsets.only(bottom: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF7F9FF),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.insert_drive_file,
+                        color: Color(0xFF2563EB),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(child: Text(_policeCertFile!.name)),
+                      GestureDetector(
+                        onTap: () {
+                          setState(() => _policeCertFile = null);
+                        },
+                        child: const Icon(Icons.delete, size: 18),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
 
               const Text(
                 "Your Location",
