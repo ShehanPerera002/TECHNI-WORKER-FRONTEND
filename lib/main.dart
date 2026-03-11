@@ -14,11 +14,9 @@ import 'screens/create_profile_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
-  
+
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
   runApp(const MyApp());
 }
 
@@ -32,7 +30,7 @@ class MyApp extends StatelessWidget {
       title: 'TECHNI Worker',
       theme: appTheme,
       // home is the AuthWrapper which decides where the user lands
-      home: const AuthWrapper(), 
+      home: const AuthWrapper(),
       routes: appRoutes,
     );
   }
@@ -50,7 +48,9 @@ class AuthWrapper extends StatelessWidget {
       builder: (context, authSnapshot) {
         // Show loading while checking auth status
         if (authSnapshot.connectionState == ConnectionState.waiting) {
-          return const Scaffold(body: Center(child: CircularProgressIndicator()));
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
         }
 
         // 1. If NO user is logged in (or they just signed out), go to Welcome
@@ -60,7 +60,7 @@ class AuthWrapper extends StatelessWidget {
         }
 
         final String uid = authSnapshot.data!.uid;
-        debugPrint("⚡ Auth: User Logged In ($uid)");
+        debugPrint("Auth: User Logged In ($uid)");
 
         // 2. If logged in, listen to their Firestore Profile document
         return StreamBuilder<DocumentSnapshot>(
@@ -70,11 +70,15 @@ class AuthWrapper extends StatelessWidget {
               .snapshots(),
           builder: (context, docSnapshot) {
             if (docSnapshot.connectionState == ConnectionState.waiting) {
-              return const Scaffold(body: Center(child: CircularProgressIndicator()));
+              return const Scaffold(
+                body: Center(child: CircularProgressIndicator()),
+              );
             }
 
             // Check if profile exists
-            if (docSnapshot.hasData && docSnapshot.data != null && docSnapshot.data!.exists) {
+            if (docSnapshot.hasData &&
+                docSnapshot.data != null &&
+                docSnapshot.data!.exists) {
               final data = docSnapshot.data!.data() as Map<String, dynamic>?;
 
               if (data != null) {
@@ -83,8 +87,8 @@ class AuthWrapper extends StatelessWidget {
                     .toString()
                     .trim()
                     .toLowerCase();
-                
-                debugPrint("🔍 Status for $uid: '$status'");
+
+                debugPrint("Status for $uid: '$status'");
 
                 if (status == 'verified') {
                   return const WorkerHomeScreen();
@@ -96,7 +100,7 @@ class AuthWrapper extends StatelessWidget {
             }
 
             // 3. If Logged in but document hasn't been created yet
-            debugPrint("📝 Status: No Profile. Redirecting to Create Profile.");
+            debugPrint("Status: No Profile. Redirecting to Create Profile.");
             return const CreateProfileScreen();
           },
         );
