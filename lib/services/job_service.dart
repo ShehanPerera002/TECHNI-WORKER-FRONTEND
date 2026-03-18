@@ -100,4 +100,10 @@ class JobService {
     final job = _jobs.firstWhere((j) => j.id == jobId);
     job.status = "declined";
   }
+
+  void completeJob(String jobId) {
+    final job = _jobs.firstWhere((j) => j.id == jobId);
+    job.status = "completed";
+    job.completedAt = DateTime.now();
+  }
 }

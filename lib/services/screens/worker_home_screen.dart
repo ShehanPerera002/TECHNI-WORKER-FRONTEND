@@ -47,6 +47,8 @@ Keep the screen responsive.
 */
 
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'earnings_details_screen.dart';
 import 'job_details_screen.dart';
 import '../../models/job_model.dart';
@@ -63,6 +65,7 @@ class WorkerHomeScreen extends StatefulWidget {
 class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
   int tabIndex = 0;
   final double weekEarnings = 5000.00;
+  bool _isDndActive = false;
 
   final JobService jobService = JobService();
   late List<Job> newJobs;
@@ -73,12 +76,44 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
     super.initState();
     newJobs = jobService.getNewJobs();
     scheduledJobs = jobService.getScheduledJobs();
-    LocationService.instance.startSharing();
+    _loadDndStatus();
+  }
+
+  Future<void> _loadDndStatus() async {
+    final workerId = FirebaseAuth.instance.currentUser?.uid;
+    if (workerId == null) return;
+    
+    try {
+      final doc = await FirebaseFirestore.instance.collection('workers').doc(workerId).get();
+      if (doc.exists && doc.data() != null) {
+        setState(() {
+          _isDndActive = doc.data()!['doNotDisturb'] ?? false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading DND status: $e');
+    }
+  }
+
+  Future<void> _toggleDnd(bool value) async {
+    setState(() {
+      _isDndActive = value;
+    });
+
+    final workerId = FirebaseAuth.instance.currentUser?.uid;
+    if (workerId == null) return;
+    
+    try {
+      await FirebaseFirestore.instance.collection('workers').doc(workerId).set({
+        'doNotDisturb': value,
+      }, SetOptions(merge: true));
+    } catch (e) {
+      debugPrint('Error setting DND status: $e');
+    }
   }
 
   @override
   void dispose() {
-    LocationService.instance.stopSharing();
     super.dispose();
   }
 
@@ -106,6 +141,23 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
         title: const Text('Worker home screen'),
         centerTitle: false,
         actions: [
+          Row(
+            children: [
+              Text(
+                'DND',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: _isDndActive ? Colors.red : Colors.black45,
+                ),
+              ),
+              Switch(
+                value: _isDndActive,
+                onChanged: _toggleDnd,
+                activeColor: Colors.red,
+              ),
+            ],
+          ),
           Padding(
             padding: const EdgeInsets.only(right: 12),
             child: Stack(
@@ -385,10 +437,8 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
               _jobRequestCard(job),
               const SizedBox(height: 12),
               _jobInformation(job),
-              if (isNewJobs) ...[
-                const SizedBox(height: 12),
-                _actionButtons(job),
-              ],
+              const SizedBox(height: 12),
+              _actionButtons(job, isNewJobs),
             ],
           ),
         );
@@ -589,62 +639,96 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
     );
   }
 
-  Widget _actionButtons(Job job) {
-    return Row(
-      children: [
-        Expanded(
-          child: SizedBox(
-            height: 44,
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
+  Widget _actionButtons(Job job, bool isNewJobs) {
+    if (isNewJobs) {
+      return Row(
+        children: [
+          Expanded(
+            child: SizedBox(
+              height: 44,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                 ),
-              ),
-              onPressed: () {
-                jobService.acceptJob(job.id);
+                onPressed: () {
+                  jobService.acceptJob(job.id);
+                  LocationService.instance.startSharing();
 
-                setState(() {
-                  newJobs = jobService.getNewJobs();
-                  scheduledJobs = jobService.getScheduledJobs();
-                });
-              },
-              child: const Text(
-                'Accept',
-                style: TextStyle(fontWeight: FontWeight.w800),
+                  setState(() {
+                    newJobs = jobService.getNewJobs();
+                    scheduledJobs = jobService.getScheduledJobs();
+                  });
+                },
+                child: const Text(
+                  'Accept',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
               ),
             ),
           ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: SizedBox(
-            height: 44,
-            child: OutlinedButton(
-              style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.black87,
-                side: const BorderSide(color: Colors.black26),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
+          const SizedBox(width: 12),
+          Expanded(
+            child: SizedBox(
+              height: 44,
+              child: OutlinedButton(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.black87,
+                  side: const BorderSide(color: Colors.black26),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                 ),
-              ),
-              onPressed: () {
-                jobService.declineJob(job.id);
+                onPressed: () {
+                  jobService.declineJob(job.id);
 
-                setState(() {
-                  newJobs = jobService.getNewJobs();
-                });
-              },
-              child: const Text(
-                'Decline',
-                style: TextStyle(fontWeight: FontWeight.w800),
+                  setState(() {
+                    newJobs = jobService.getNewJobs();
+                  });
+                },
+                child: const Text(
+                  'Decline',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
               ),
             ),
           ),
-        ),
-      ],
-    );
+        ],
+      );
+    } else {
+      return Row(
+        children: [
+          Expanded(
+            child: SizedBox(
+              height: 44,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF2563EB),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                onPressed: () {
+                  jobService.completeJob(job.id);
+                  LocationService.instance.stopSharing();
+
+                  setState(() {
+                    scheduledJobs = jobService.getScheduledJobs();
+                  });
+                },
+                child: const Text(
+                  'Complete Job',
+                  style: TextStyle(fontWeight: FontWeight.w800),
+                ),
+              ),
+            ),
+          ),
+        ],
+      );
+    }
   }
 }
