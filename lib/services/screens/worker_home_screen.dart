@@ -68,14 +68,10 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
   bool _isDndActive = false;
 
   final JobService jobService = JobService();
-  late List<Job> newJobs;
-  late List<Job> scheduledJobs;
 
   @override
   void initState() {
     super.initState();
-    newJobs = jobService.getNewJobs();
-    scheduledJobs = jobService.getScheduledJobs();
     _loadDndStatus();
   }
 
@@ -203,12 +199,29 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
             children: [
               _earningsCard(context),
               const SizedBox(height: 14),
-              _tabs(),
-              const SizedBox(height: 14),
-              if (tabIndex == 0)
-                _jobsSection(jobs: newJobs, isNewJobs: true)
-              else
-                _jobsSection(jobs: scheduledJobs, isNewJobs: false),
+              // StreamBuilder for new (pending) jobs
+              StreamBuilder<List<Job>>(
+                stream: jobService.streamNewJobs(),
+                builder: (context, newSnap) {
+                  final newJobs = newSnap.data ?? [];
+                  return StreamBuilder<List<Job>>(
+                    stream: jobService.streamScheduledJobs(),
+                    builder: (context, schedSnap) {
+                      final scheduledJobs = schedSnap.data ?? [];
+                      return Column(
+                        children: [
+                          _tabs(newJobs.length),
+                          const SizedBox(height: 14),
+                          if (tabIndex == 0)
+                            _jobsSection(jobs: newJobs, isNewJobs: true)
+                          else
+                            _jobsSection(jobs: scheduledJobs, isNewJobs: false),
+                        ],
+                      );
+                    },
+                  );
+                },
+              ),
             ],
           ),
         ),
@@ -216,12 +229,9 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
     );
   }
 
+  // Pull-to-refresh just forces the stream to re-evaluate (streams auto-update, nothing needed)
   Future<void> _refreshJobs() async {
     await Future<void>.delayed(const Duration(milliseconds: 350));
-    setState(() {
-      newJobs = jobService.getNewJobs();
-      scheduledJobs = jobService.getScheduledJobs();
-    });
   }
 
   /*
@@ -332,14 +342,14 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
     );
   }
 
-  Widget _tabs() {
+  Widget _tabs(int newJobCount) {
     return Row(
       children: [
         Expanded(
           child: _tabButton(
             'New Job Requests',
             tabIndex == 0,
-            badge: newJobs.length,
+            badge: newJobCount,
           ),
         ),
         const SizedBox(width: 10),
@@ -654,14 +664,10 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
                     borderRadius: BorderRadius.circular(10),
                   ),
                 ),
-                onPressed: () {
-                  jobService.acceptJob(job.id);
+                onPressed: () async {
+                  await jobService.acceptJob(job.id);
                   LocationService.instance.startSharing();
-
-                  setState(() {
-                    newJobs = jobService.getNewJobs();
-                    scheduledJobs = jobService.getScheduledJobs();
-                  });
+                  // Stream auto-updates UI — no setState needed
                 },
                 child: const Text(
                   'Accept',
@@ -682,12 +688,9 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
                     borderRadius: BorderRadius.circular(10),
                   ),
                 ),
-                onPressed: () {
-                  jobService.declineJob(job.id);
-
-                  setState(() {
-                    newJobs = jobService.getNewJobs();
-                  });
+                onPressed: () async {
+                  await jobService.declineJob(job.id);
+                  // Stream auto-updates UI — no setState needed
                 },
                 child: const Text(
                   'Decline',
@@ -712,13 +715,10 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
                     borderRadius: BorderRadius.circular(10),
                   ),
                 ),
-                onPressed: () {
-                  jobService.completeJob(job.id);
+                onPressed: () async {
+                  await jobService.completeJob(job.id);
                   LocationService.instance.stopSharing();
-
-                  setState(() {
-                    scheduledJobs = jobService.getScheduledJobs();
-                  });
+                  // Stream auto-updates UI — no setState needed
                 },
                 child: const Text(
                   'Complete Job',
