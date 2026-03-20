@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import '../../models/job_model.dart';
+import '../../models/job_request.dart';
 
 class JobDetailsScreen extends StatelessWidget {
   const JobDetailsScreen({super.key, required this.job});
 
-  final Job job;
+  final JobRequest job;
 
   @override
   Widget build(BuildContext context) {
@@ -30,17 +30,15 @@ class JobDetailsScreen extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '${job.category} • ${job.urgency}',
+                  '${job.jobType} • Normal',
                   style: TextStyle(
-                    color: job.urgency == 'Emergency'
-                        ? Colors.red
-                        : const Color(0xFF2563EB),
+                    color: const Color(0xFF2563EB),
                     fontWeight: FontWeight.w700,
                   ),
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  job.title,
+                  '${job.jobType} Request',
                   style: const TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.w800,
@@ -48,7 +46,7 @@ class JobDetailsScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  '${job.distance.toStringAsFixed(1)} km away • Est. Rs. ${job.estimatedPrice.toStringAsFixed(0)}',
+                  '2.5 km away • Est. Rs. ${job.fare?.toStringAsFixed(0) ?? '0'}',
                   style: const TextStyle(color: Colors.black54),
                 ),
                 const SizedBox(height: 8),
@@ -57,7 +55,7 @@ class JobDetailsScreen extends StatelessWidget {
                     const Icon(Icons.star, color: Colors.orange, size: 16),
                     const SizedBox(width: 4),
                     Text(
-                      '${job.rating.toStringAsFixed(1)} Customer Rating',
+                      '4.5 Customer Rating',
                       style: const TextStyle(fontWeight: FontWeight.w600),
                     ),
                   ],
@@ -82,7 +80,7 @@ class JobDetailsScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  job.description,
+                  job.description ?? 'No description provided',
                   style: const TextStyle(color: Colors.black54),
                 ),
                 const SizedBox(height: 14),
@@ -92,7 +90,7 @@ class JobDetailsScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  job.address,
+                  'Customer Location Map Pin',
                   style: const TextStyle(color: Colors.black54),
                 ),
                 const SizedBox(height: 14),
