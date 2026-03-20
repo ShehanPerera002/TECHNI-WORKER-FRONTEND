@@ -6,11 +6,12 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_polyline_points/flutter_polyline_points.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../../models/job_model.dart';
+import '../../models/job_request.dart';
 import '../location_service.dart';
+import 'earnings_details_screen.dart';
 
 class WorkerNavigationScreen extends StatefulWidget {
-  final Job job;
+  final JobRequest job;
 
   const WorkerNavigationScreen({super.key, required this.job});
 
@@ -29,12 +30,36 @@ class _WorkerNavigationScreenState extends State<WorkerNavigationScreen> {
   String _distanceText = '';
   bool _isArriving = false;
 
+  StreamSubscription<DocumentSnapshot>? _jobStatusSub;
+
   @override
   void initState() {
     super.initState();
-    // Start high-frequency navigation tracking
-    LocationService.instance.startNavigationTracking();
+    // Update status to inProgress
+    FirebaseFirestore.instance.collection('jobRequests').doc(widget.job.id).update({
+      'status': 'inProgress',
+      'navigationStartedAt': FieldValue.serverTimestamp(),
+    });
+
+    // Start high-frequency navigation tracking with jobId
+    LocationService.instance.startNavigationTracking(jobId: widget.job.id);
     _listenToWorkerLocation();
+    _listenToJobStatus();
+  }
+
+  void _listenToJobStatus() {
+    _jobStatusSub = FirebaseFirestore.instance
+        .collection('jobRequests')
+        .doc(widget.job.id)
+        .snapshots()
+        .listen((doc) {
+      if (!doc.exists) return;
+      final status = doc.data()?['status'];
+      if (status == 'completed' && mounted) {
+        LocationService.instance.stopNavigationTracking();
+        Navigator.pop(context);
+      }
+    });
   }
 
   /// Listen to this worker's own location updates from Firestore
@@ -188,7 +213,7 @@ class _WorkerNavigationScreenState extends State<WorkerNavigationScreen> {
 
     try {
       await FirebaseFirestore.instance
-          .collection('jobs')
+          .collection('jobRequests')
           .doc(widget.job.id)
           .update({'status': 'arrived'});
 
@@ -212,7 +237,7 @@ class _WorkerNavigationScreenState extends State<WorkerNavigationScreen> {
 
   /// Call the customer
   Future<void> _callCustomer() async {
-    if (widget.job.customerPhone.isEmpty) return;
+    if (widget.job.customerPhone == null || widget.job.customerPhone!.isEmpty) return;
     final url = Uri.parse('tel:${widget.job.customerPhone}');
     if (await canLaunchUrl(url)) {
       await launchUrl(url);
@@ -222,6 +247,7 @@ class _WorkerNavigationScreenState extends State<WorkerNavigationScreen> {
   @override
   void dispose() {
     _locationSub?.cancel();
+    _jobStatusSub?.cancel();
     _mapController?.dispose();
     super.dispose();
   }
@@ -289,7 +315,7 @@ class _WorkerNavigationScreenState extends State<WorkerNavigationScreen> {
                         ),
                       ),
                       // Call button
-                      if (widget.job.customerPhone.isNotEmpty)
+                      if (widget.job.customerPhone != null && widget.job.customerPhone!.isNotEmpty)
                         GestureDetector(
                           onTap: _callCustomer,
                           child: Container(
@@ -311,18 +337,16 @@ class _WorkerNavigationScreenState extends State<WorkerNavigationScreen> {
 
                   // Category + job title
                   Text(
-                    '${widget.job.category} • ${widget.job.urgency}',
+                    '${widget.job.jobType} • Normal',
                     style: TextStyle(
-                      color: widget.job.urgency == 'Emergency'
-                          ? Colors.red
-                          : const Color(0xFF2563EB),
+                      color: const Color(0xFF2563EB),
                       fontWeight: FontWeight.w700,
                       fontSize: 12,
                     ),
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    widget.job.title,
+                    '${widget.job.jobType} Request',
                     style: const TextStyle(fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 4),
@@ -332,7 +356,7 @@ class _WorkerNavigationScreenState extends State<WorkerNavigationScreen> {
                       const SizedBox(width: 4),
                       Expanded(
                         child: Text(
-                          widget.job.address,
+                          'Customer Location Map Pin',
                           style: const TextStyle(color: Colors.black54, fontSize: 12),
                           overflow: TextOverflow.ellipsis,
                         ),
