@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.onWorkerTokenUpdated = exports.onNewJobCreated = void 0;
+exports.onJobConfirmed = exports.onWorkerTokenUpdated = exports.onNewJobCreated = void 0;
 const firestore_1 = require("firebase-functions/v2/firestore");
 const firestore_2 = require("firebase-functions/v2/firestore");
 const admin = require("firebase-admin");
@@ -108,6 +108,75 @@ exports.onWorkerTokenUpdated = (0, firestore_2.onDocumentUpdated)("workers/{work
         return;
     if (before["fcmToken"] !== after["fcmToken"] && before["fcmToken"]) {
         console.log(`FCM token refreshed for worker ${event.params.workerId}`);
+    }
+});
+// ─── Cloud Function: Notify worker when customer confirms them ────────────────
+exports.onJobConfirmed = (0, firestore_2.onDocumentUpdated)("jobs/{jobId}", async (event) => {
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k;
+    const before = (_a = event.data) === null || _a === void 0 ? void 0 : _a.before.data();
+    const after = (_b = event.data) === null || _b === void 0 ? void 0 : _b.after.data();
+    if (!before || !after)
+        return;
+    // Only trigger when status changes TO 'confirmed'
+    if (before["status"] === "confirmed" || after["status"] !== "confirmed") {
+        return;
+    }
+    const workerId = after["workerId"];
+    const jobId = event.params.jobId;
+    if (!workerId) {
+        console.log(`Job ${jobId} confirmed but no workerId assigned.`);
+        return;
+    }
+    console.log(`Job ${jobId} confirmed for worker ${workerId}. Sending notification...`);
+    // Get the worker's FCM token
+    const workerDoc = await db.collection("workers").doc(workerId).get();
+    if (!workerDoc.exists) {
+        console.log(`Worker ${workerId} not found.`);
+        return;
+    }
+    const workerData = workerDoc.data();
+    const fcmToken = workerData === null || workerData === void 0 ? void 0 : workerData["fcmToken"];
+    if (!fcmToken) {
+        console.log(`Worker ${workerId} has no FCM token.`);
+        return;
+    }
+    const message = {
+        token: fcmToken,
+        notification: {
+            title: "You've been selected! 🎉",
+            body: `${(_c = after["customerName"]) !== null && _c !== void 0 ? _c : "A customer"} needs ${(_d = after["title"]) !== null && _d !== void 0 ? _d : "your service"}. Tap to navigate.`,
+        },
+        data: {
+            jobId: jobId,
+            jobTitle: String((_e = after["title"]) !== null && _e !== void 0 ? _e : ""),
+            category: String((_f = after["category"]) !== null && _f !== void 0 ? _f : ""),
+            customerLat: String((_g = after["customerLat"]) !== null && _g !== void 0 ? _g : ""),
+            customerLng: String((_h = after["customerLng"]) !== null && _h !== void 0 ? _h : ""),
+            customerName: String((_j = after["customerName"]) !== null && _j !== void 0 ? _j : ""),
+            customerPhone: String((_k = after["customerPhone"]) !== null && _k !== void 0 ? _k : ""),
+        },
+        android: {
+            priority: "high",
+            notification: {
+                channelId: "job_confirmed",
+                sound: "default",
+            },
+        },
+        apns: {
+            payload: {
+                aps: {
+                    sound: "default",
+                    badge: 1,
+                },
+            },
+        },
+    };
+    try {
+        await messaging.send(message);
+        console.log(`Confirmation notification sent to worker ${workerId}.`);
+    }
+    catch (err) {
+        console.error(`Failed to send confirmation notification: ${err}`);
     }
 });
 //# sourceMappingURL=index.js.map

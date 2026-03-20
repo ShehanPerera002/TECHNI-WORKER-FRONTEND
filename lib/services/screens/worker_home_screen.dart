@@ -52,6 +52,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'earnings_details_screen.dart';
 import 'job_details_screen.dart';
+import 'worker_navigation_screen.dart';
 import '../../models/job_model.dart';
 import '../job_service.dart';
 import '../location_service.dart';
@@ -74,12 +75,15 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
   List<Job> _scheduledJobs = [];
   StreamSubscription<List<Job>>? _newJobsSub;
   StreamSubscription<List<Job>>? _scheduledJobsSub;
+  StreamSubscription<QuerySnapshot>? _confirmedJobSub;
+  bool _hasNavigatedToJob = false;
 
   @override
   void initState() {
     super.initState();
     _loadDndStatus();
     _subscribeToJobs();
+    _listenForConfirmedJobs();
   }
 
   void _subscribeToJobs() {
@@ -88,6 +92,39 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
     });
     _scheduledJobsSub = jobService.streamScheduledJobs().listen((jobs) {
       if (mounted) setState(() => _scheduledJobs = jobs);
+    });
+  }
+
+  /// Listens for jobs where the customer has confirmed this worker.
+  /// When detected, auto-navigates to the WorkerNavigationScreen.
+  void _listenForConfirmedJobs() {
+    final workerId = FirebaseAuth.instance.currentUser?.uid;
+    if (workerId == null) return;
+
+    _confirmedJobSub = FirebaseFirestore.instance
+        .collection('jobs')
+        .where('status', isEqualTo: 'confirmed')
+        .where('workerId', isEqualTo: workerId)
+        .snapshots()
+        .listen((snapshot) {
+      if (snapshot.docs.isNotEmpty && !_hasNavigatedToJob && mounted) {
+        final doc = snapshot.docs.first;
+        final job = Job.fromFirestore(doc.id, doc.data());
+        _hasNavigatedToJob = true;
+
+        // Start location sharing and navigate to navigation screen
+        LocationService.instance.startNavigationTracking();
+
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => WorkerNavigationScreen(job: job),
+          ),
+        ).then((_) {
+          // Reset flag when returning from navigation screen
+          _hasNavigatedToJob = false;
+        });
+      }
     });
   }
 
@@ -128,6 +165,7 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
   void dispose() {
     _newJobsSub?.cancel();
     _scheduledJobsSub?.cancel();
+    _confirmedJobSub?.cancel();
     super.dispose();
   }
 

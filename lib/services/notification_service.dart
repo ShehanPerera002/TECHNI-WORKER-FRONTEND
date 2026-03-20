@@ -1,15 +1,20 @@
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import '../models/job_model.dart';
+import 'screens/worker_navigation_screen.dart';
 
 class NotificationService {
   static final NotificationService instance = NotificationService._();
   NotificationService._();
 
   final FirebaseMessaging _messaging = FirebaseMessaging.instance;
+  GlobalKey<NavigatorState>? _navigatorKey;
 
-  Future<void> initialize() async {
+  Future<void> initialize(GlobalKey<NavigatorState> navigatorKey) async {
+    _navigatorKey = navigatorKey;
+
     // 1. Request Permission
     NotificationSettings settings = await _messaging.requestPermission(
       alert: true,
@@ -47,6 +52,42 @@ class NotificationService {
       if (message.notification != null) {
         debugPrint('Message also contained a notification: ${message.notification}');
       }
+    });
+
+    // 4. Handle notification taps when app is in background (but not killed)
+    FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+      debugPrint('Notification tapped (background): ${message.data}');
+      _handleNotificationTap(message.data);
+    });
+
+    // 5. Handle notification taps when app was killed (cold start)
+    final initialMessage = await _messaging.getInitialMessage();
+    if (initialMessage != null) {
+      debugPrint('App opened from killed state via notification: ${initialMessage.data}');
+      // Delay slightly to ensure navigator is ready
+      Future.delayed(const Duration(milliseconds: 500), () {
+        _handleNotificationTap(initialMessage.data);
+      });
+    }
+  }
+
+  /// Navigate the worker to the WorkerNavigationScreen when they tap a job notification
+  void _handleNotificationTap(Map<String, dynamic> data) {
+    final jobId = data['jobId'] as String?;
+    if (jobId == null || _navigatorKey?.currentState == null) return;
+
+    // Fetch the full job document from Firestore and navigate
+    FirebaseFirestore.instance.collection('jobs').doc(jobId).get().then((doc) {
+      if (!doc.exists) return;
+      final job = Job.fromFirestore(doc.id, doc.data()!);
+
+      _navigatorKey!.currentState!.push(
+        MaterialPageRoute(
+          builder: (context) => WorkerNavigationScreen(job: job),
+        ),
+      );
+    }).catchError((e) {
+      debugPrint('Error fetching job for notification navigation: $e');
     });
   }
 

@@ -133,3 +133,82 @@ export const onWorkerTokenUpdated = onDocumentUpdated(
     }
   }
 );
+
+// ─── Cloud Function: Notify worker when customer confirms them ────────────────
+export const onJobConfirmed = onDocumentUpdated(
+  "jobs/{jobId}",
+  async (event) => {
+    const before = event.data?.before.data();
+    const after = event.data?.after.data();
+    if (!before || !after) return;
+
+    // Only trigger when status changes TO 'confirmed'
+    if (before["status"] === "confirmed" || after["status"] !== "confirmed") {
+      return;
+    }
+
+    const workerId: string | undefined = after["workerId"];
+    const jobId = event.params.jobId;
+
+    if (!workerId) {
+      console.log(`Job ${jobId} confirmed but no workerId assigned.`);
+      return;
+    }
+
+    console.log(`Job ${jobId} confirmed for worker ${workerId}. Sending notification...`);
+
+    // Get the worker's FCM token
+    const workerDoc = await db.collection("workers").doc(workerId).get();
+    if (!workerDoc.exists) {
+      console.log(`Worker ${workerId} not found.`);
+      return;
+    }
+
+    const workerData = workerDoc.data();
+    const fcmToken: string | undefined = workerData?.["fcmToken"];
+
+    if (!fcmToken) {
+      console.log(`Worker ${workerId} has no FCM token.`);
+      return;
+    }
+
+    const message: admin.messaging.Message = {
+      token: fcmToken,
+      notification: {
+        title: "You've been selected! 🎉",
+        body: `${after["customerName"] ?? "A customer"} needs ${after["title"] ?? "your service"}. Tap to navigate.`,
+      },
+      data: {
+        jobId: jobId,
+        jobTitle: String(after["title"] ?? ""),
+        category: String(after["category"] ?? ""),
+        customerLat: String(after["customerLat"] ?? ""),
+        customerLng: String(after["customerLng"] ?? ""),
+        customerName: String(after["customerName"] ?? ""),
+        customerPhone: String(after["customerPhone"] ?? ""),
+      },
+      android: {
+        priority: "high",
+        notification: {
+          channelId: "job_confirmed",
+          sound: "default",
+        },
+      },
+      apns: {
+        payload: {
+          aps: {
+            sound: "default",
+            badge: 1,
+          },
+        },
+      },
+    };
+
+    try {
+      await messaging.send(message);
+      console.log(`Confirmation notification sent to worker ${workerId}.`);
+    } catch (err) {
+      console.error(`Failed to send confirmation notification: ${err}`);
+    }
+  }
+);

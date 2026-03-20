@@ -10,6 +10,8 @@ class Job {
   final String urgency;
   final double customerLat;
   final double customerLng;
+  final String customerName;
+  final String customerPhone;
 
   String status;
   DateTime? completedAt;
@@ -28,6 +30,8 @@ class Job {
     this.completedAt,
     this.customerLat = 6.9271,
     this.customerLng = 79.8612,
+    this.customerName = '',
+    this.customerPhone = '',
   });
 
   /// Create a Job from a Firestore document snapshot
@@ -45,6 +49,8 @@ class Job {
       status: data['status'] ?? 'pending',
       customerLat: (data['customerLat'] as num?)?.toDouble() ?? 6.9271,
       customerLng: (data['customerLng'] as num?)?.toDouble() ?? 79.8612,
+      customerName: data['customerName'] ?? '',
+      customerPhone: data['customerPhone'] ?? '',
       completedAt: data['completedAt'] != null
           ? DateTime.tryParse(data['completedAt'].toString())
           : null,
@@ -65,6 +71,8 @@ class Job {
       'status': status,
       'customerLat': customerLat,
       'customerLng': customerLng,
+      'customerName': customerName,
+      'customerPhone': customerPhone,
       if (completedAt != null) 'completedAt': completedAt!.toIso8601String(),
     };
   }

@@ -10,6 +10,7 @@ class LocationService {
   LocationService._();
 
   StreamSubscription<Position>? _positionSub;
+  StreamSubscription<Position>? _navigationSub;
 
   Future<void> startSharing() async {
     // Request permissions
@@ -75,9 +76,78 @@ class LocationService {
     });
   }
 
+  /// High-frequency tracking for active navigation (10m filter, 5s interval)
+  Future<void> startNavigationTracking() async {
+    LocationPermission permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied) return;
+    }
+    if (permission == LocationPermission.deniedForever) return;
+
+    final workerId = FirebaseAuth.instance.currentUser?.uid;
+    if (workerId == null) return;
+
+    // Cancel passive sharing if active
+    await _positionSub?.cancel();
+    _positionSub = null;
+
+    late LocationSettings locationSettings;
+
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      locationSettings = AndroidSettings(
+        accuracy: LocationAccuracy.high,
+        distanceFilter: 10, // update every 10 meters
+        forceLocationManager: true,
+        intervalDuration: const Duration(seconds: 5),
+        foregroundNotificationConfig: const ForegroundNotificationConfig(
+          notificationText: "Navigating to customer...",
+          notificationTitle: "TECHNI Navigation Active",
+          enableWakeLock: true,
+        ),
+      );
+    } else if (defaultTargetPlatform == TargetPlatform.iOS || defaultTargetPlatform == TargetPlatform.macOS) {
+      locationSettings = AppleSettings(
+        accuracy: LocationAccuracy.high,
+        activityType: ActivityType.automotiveNavigation,
+        distanceFilter: 10,
+        pauseLocationUpdatesAutomatically: false,
+        allowBackgroundLocationUpdates: true,
+      );
+    } else {
+      locationSettings = const LocationSettings(
+        accuracy: LocationAccuracy.high,
+        distanceFilter: 10,
+      );
+    }
+
+    _navigationSub = Geolocator.getPositionStream(
+      locationSettings: locationSettings,
+    ).listen((Position pos) {
+      final geoPoint = GeoFirePoint(GeoPoint(pos.latitude, pos.longitude));
+
+      FirebaseFirestore.instance.collection('workers').doc(workerId).set({
+        'lat': pos.latitude,
+        'lng': pos.longitude,
+        'isOnline': true,
+        'position': geoPoint.data,
+      }, SetOptions(merge: true));
+    });
+  }
+
+  /// Stop navigation tracking and switch back to passive sharing
+  Future<void> stopNavigationTracking() async {
+    await _navigationSub?.cancel();
+    _navigationSub = null;
+    // Resume passive sharing
+    await startSharing();
+  }
+
   Future<void> stopSharing() async {
     await _positionSub?.cancel();
     _positionSub = null;
+    await _navigationSub?.cancel();
+    _navigationSub = null;
 
     final workerId = FirebaseAuth.instance.currentUser?.uid;
     if (workerId == null) return;

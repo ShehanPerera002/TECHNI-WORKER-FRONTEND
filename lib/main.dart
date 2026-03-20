@@ -7,6 +7,9 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'services/notification_service.dart';
 
+/// Global navigator key — used by NotificationService for navigation on notification taps
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   // Ensure Firebase is initialized before using other Firebase services
@@ -27,7 +30,7 @@ Future<void> main() async {
   
   // Ignore error if initialization fails (e.g., if no valid app token exists yet without a physical device)
   try {
-    await NotificationService.instance.initialize();
+    await NotificationService.instance.initialize(navigatorKey);
   } catch (e) {
     debugPrint('Failed to initialize NotificationService: $e');
   }
@@ -41,6 +44,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: navigatorKey,
       debugShowCheckedModeBanner: false,
       title: 'TECHNI Worker',
       theme: appTheme,
