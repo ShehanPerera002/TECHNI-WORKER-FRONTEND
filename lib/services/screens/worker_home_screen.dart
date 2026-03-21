@@ -112,10 +112,7 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
         final doc = snapshot.docs.first;
         final job = JobRequest.fromFirestore(doc);
         _hasNavigatedToJob = true;
-
-        // Start location sharing and navigate to navigation screen
-        LocationService.instance.startNavigationTracking();
-
+        
         Navigator.push(
           context,
           MaterialPageRoute(
