@@ -1,6 +1,6 @@
-import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
 import '../models/job_request.dart';
 
 class JobService {
@@ -51,25 +51,43 @@ class JobService {
         .where('workerId', isEqualTo: wid)
         .where('status', whereIn: ['inProgress', 'arrived', 'workStarted'])
         .snapshots()
-        .map((snap) => snap.docs
+        .map((snap) {
+          // Additional safety: ensure we only show very recent or truly active jobs
+          return snap.docs
             .map((doc) => JobRequest.fromFirestore(doc))
-            .toList());
+            .where((job) {
+              // If status is 'completed' somehow in this stream, skip it
+              return job.status != 'completed';
+            })
+            .toList();
+        });
   }
 
-  /// Stream jobs that have been completed by the current logged-in worker.
+  /// Stream jobs from the dedicated "completed jobs" collection.
   Stream<List<JobRequest>> streamCompletedJobs() {
     final wid = _workerId;
     if (wid == null) return const Stream.empty();
 
+    // We remove the server-side orderBy to avoid requiring a composite index.
+    // Instead, we sort the results in memory (client-side).
     return _firestore
-        .collection('jobRequests')
+        .collection('completed jobs')
         .where('workerId', isEqualTo: wid)
-        .where('status', isEqualTo: 'completed')
-        .orderBy('completedAt', descending: true)
         .snapshots()
-        .map((snap) => snap.docs
+        .map((snap) {
+          final jobs = snap.docs
             .map((doc) => JobRequest.fromFirestore(doc))
-            .toList());
+            .toList();
+          
+          // Sort client-side: descending by completedAt
+          jobs.sort((a, b) {
+            final dateA = a.completedAt ?? a.createdAt;
+            final dateB = b.completedAt ?? b.createdAt;
+            return dateB.compareTo(dateA);
+          });
+          
+          return jobs;
+        });
   }
 
   // ─── Write Operations ────────────────────────────────────────────────────────
@@ -101,15 +119,49 @@ class JobService {
     });
   }
 
-  /// Deletes all completed jobs for the current worker.
+  /// Worker completes a job: stamps completion timestamp and moves to "completed jobs" collection.
+  Future<void> completeJob(String jobId) async {
+    final wid = _workerId;
+    if (wid == null) return;
+
+    final docRef = _firestore.collection('jobRequests').doc(jobId);
+    final snapshot = await docRef.get();
+    if (!snapshot.exists) return;
+
+    final data = snapshot.data() ?? {};
+    final now = FieldValue.serverTimestamp();
+
+    // 1. Update the original request status
+    await docRef.update({
+      'status': 'completed',
+      'completedAt': now,
+    });
+
+    // 2. Create a record in the dedicated "completed jobs" collection
+    // We merge the existing data with the completion details
+    await _firestore.collection('completed jobs').doc(jobId).set({
+      ...data,
+      'status': 'completed',
+      'completedAt': now,
+      'workerId': wid, // Ensure workerId is set correctly
+    }, SetOptions(merge: true));
+
+    // 3. Clear from worker's activeJobId if any
+    await _firestore.collection('workers').doc(wid).update({
+      'activeJobId': null,
+    });
+
+    debugPrint('JobService: Job $jobId moved to completed jobs collection');
+  }
+
+  /// Deletes all completed jobs from the dedicated collection.
   Future<void> clearCompletedJobs() async {
     final wid = _workerId;
     if (wid == null) return;
 
     final snapshot = await _firestore
-        .collection('jobRequests')
+        .collection('completed jobs')
         .where('workerId', isEqualTo: wid)
-        .where('status', isEqualTo: 'completed')
         .get();
 
     final batch = _firestore.batch();
@@ -117,6 +169,7 @@ class JobService {
       batch.delete(doc.reference);
     }
     await batch.commit();
+    debugPrint('JobService: Cleared all jobs from completed jobs collection');
   }
 
   /// Deletes all pending or ongoing jobs for the current worker (cleanup).

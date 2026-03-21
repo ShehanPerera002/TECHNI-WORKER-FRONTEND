@@ -82,6 +82,7 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
   StreamSubscription<List<JobRequest>>? _completedJobsSub;
   StreamSubscription<QuerySnapshot>? _confirmedJobSub;
   bool _hasNavigatedToJob = false;
+  String? _streamError;
 
   @override
   void initState() {
@@ -93,21 +94,30 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
 
   void _subscribeToJobs() {
     _newJobsSub = jobService.streamNewJobs().listen(
-      (jobs) { if (mounted) setState(() => _newJobs = jobs); },
-      onError: (e) => debugPrint('New jobs stream error: $e'),
+      (jobs) { if (mounted) setState(() { _newJobs = jobs; _streamError = null; }); },
+      onError: (e) => _handleStreamError('New', e),
     );
     _scheduledJobsSub = jobService.streamScheduledJobs().listen(
-      (jobs) { if (mounted) setState(() => _scheduledJobs = jobs); },
-      onError: (e) => debugPrint('Scheduled jobs stream error: $e'),
+      (jobs) { if (mounted) setState(() { _scheduledJobs = jobs; _streamError = null; }); },
+      onError: (e) => _handleStreamError('Scheduled', e),
     );
     _ongoingJobsSub = jobService.streamOngoingJobs().listen(
-      (jobs) { if (mounted) setState(() => _ongoingJobs = jobs); },
-      onError: (e) => debugPrint('Ongoing jobs stream error: $e'),
+      (jobs) { if (mounted) setState(() { _ongoingJobs = jobs; _streamError = null; }); },
+      onError: (e) => _handleStreamError('Ongoing', e),
     );
     _completedJobsSub = jobService.streamCompletedJobs().listen(
-      (jobs) { if (mounted) setState(() => _completedJobs = jobs); },
-      onError: (e) => debugPrint('Completed jobs stream error: $e'),
+      (jobs) { if (mounted) setState(() { _completedJobs = jobs; _streamError = null; }); },
+      onError: (e) => _handleStreamError('Completed', e),
     );
+  }
+
+  void _handleStreamError(String source, Object e) {
+    debugPrint('$source jobs stream error: $e');
+    if (mounted) {
+      setState(() {
+        _streamError = e.toString();
+      });
+    }
   }
 
   /// Listens for jobs where the customer has confirmed this worker.
@@ -295,6 +305,10 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
 
   // Pull-to-refresh just forces the stream to re-evaluate (streams auto-update, nothing needed)
   Future<void> _refreshJobs() async {
+    setState(() {
+      _hasNavigatedToJob = false; // Reset navigation flag on manual refresh
+      _streamError = null;
+    });
     await Future<void>.delayed(const Duration(milliseconds: 350));
   }
 
@@ -478,6 +492,39 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
   }
 
   Widget _jobsSection({required List<JobRequest> jobs, required String type}) {
+    if (_streamError != null && ((type == 'completed' && _completedJobs.isEmpty) || (type == 'ongoing' && _ongoingJobs.isEmpty) || (type == 'scheduled' && _scheduledJobs.isEmpty) || (type == 'new' && _newJobs.isEmpty))) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(14),
+          color: Colors.red.shade50,
+          border: Border.all(color: Colors.red.shade200),
+        ),
+        child: Column(
+          children: [
+            const Icon(Icons.error_outline, color: Colors.red, size: 32),
+            const SizedBox(height: 12),
+            const Text(
+              'Sync Error',
+              style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _streamError!,
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.red.shade800, fontSize: 12),
+            ),
+            const SizedBox(height: 12),
+            TextButton(
+              onPressed: _refreshJobs,
+              child: const Text('Retry Sync'),
+            ),
+          ],
+        ),
+      );
+    }
+
     if (jobs.isEmpty) {
       IconData icon;
       String message;
@@ -545,6 +592,31 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
               },
               icon: const Icon(Icons.delete_sweep, color: Colors.red, size: 20),
               label: const Text('Delete All Completed', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+            ),
+          ),
+        
+        if (type == 'ongoing' && jobs.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: TextButton.icon(
+              onPressed: () async {
+                final confirm = await showDialog<bool>(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    title: const Text('Cleanup Ongoing'),
+                    content: const Text('This will remove all stuck or stale active jobs from your list and reset your status to Available. Continue?'),
+                    actions: [
+                      TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+                      TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Cleanup', style: TextStyle(color: Colors.orange))),
+                    ],
+                  ),
+                );
+                if (confirm == true) {
+                  await jobService.clearOngoingJobs();
+                }
+              },
+              icon: const Icon(Icons.cleaning_services, color: Colors.orange, size: 20),
+              label: const Text('Clear All Ongoing (Cleanup)', style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold)),
             ),
           ),
         ...jobs.map((job) {
