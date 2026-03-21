@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -8,7 +9,6 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../models/job_request.dart';
 import '../location_service.dart';
-import 'earnings_details_screen.dart';
 
 class WorkerNavigationScreen extends StatefulWidget {
   final JobRequest job;
@@ -29,27 +29,43 @@ class _WorkerNavigationScreenState extends State<WorkerNavigationScreen> {
   String _etaText = 'Calculating...';
   String _distanceText = '';
   bool _isArriving = false;
+  late LatLng _customerLatLng;
 
+  String _jobStatus = 'inProgress';
+  int _timerSeconds = 0;
+  DateTime? _jobStartedAt;
+  late final Ticker _ticker;
   StreamSubscription<DocumentSnapshot>? _jobStatusSub;
 
   @override
   void initState() {
     super.initState();
-    // Update status to inProgress
-    FirebaseFirestore.instance
-        .collection('jobRequests')
-        .doc(widget.job.id)
-        .update({
-          'status': 'inProgress',
-          'navigationStartedAt': FieldValue.serverTimestamp(),
-        })
-        .then((_) => debugPrint('Job status updated to inProgress'))
-        .catchError((e) => debugPrint('Error updating job status: $e'));
+    _ticker = Ticker(_onTick);
+    _customerLatLng = LatLng(widget.job.customerLat, widget.job.customerLng);
+    
+    // Update status to inProgress if not already
+    if (widget.job.status == 'customerConfirmed' || widget.job.status == 'searching') {
+      FirebaseFirestore.instance
+          .collection('jobRequests')
+          .doc(widget.job.id)
+          .update({
+            'status': 'inProgress',
+            'navigationStartedAt': FieldValue.serverTimestamp(),
+          });
+    }
 
-    // Start high-frequency navigation tracking with jobId
+    _jobStatus = widget.job.status;
     LocationService.instance.startNavigationTracking(jobId: widget.job.id);
     _listenToWorkerLocation();
     _listenToJobStatus();
+  }
+
+  void _onTick(Duration duration) {
+    if (_jobStartedAt != null && mounted) {
+      setState(() {
+        _timerSeconds = DateTime.now().difference(_jobStartedAt!).inSeconds;
+      });
+    }
   }
 
   void _listenToJobStatus() {
@@ -58,12 +74,40 @@ class _WorkerNavigationScreenState extends State<WorkerNavigationScreen> {
         .doc(widget.job.id)
         .snapshots()
         .listen((doc) {
-      if (!doc.exists) return;
-      final status = doc.data()?['status'];
-      if (status == 'completed' && mounted) {
-        LocationService.instance.stopNavigationTracking();
-        Navigator.pop(context);
+      if (!doc.exists || !mounted) return;
+      final data = doc.data()!;
+      final status = data['status'];
+      
+      // Update customer location if changed
+      if (data['customerLocation'] is GeoPoint) {
+        final geo = data['customerLocation'] as GeoPoint;
+        final newCustomerLatLng = LatLng(geo.latitude, geo.longitude);
+        
+        if (newCustomerLatLng.latitude != _customerLatLng.latitude || 
+            newCustomerLatLng.longitude != _customerLatLng.longitude) {
+          debugPrint('WorkerNavigationScreen: Customer moved! Updating route...');
+          _customerLatLng = newCustomerLatLng;
+          
+          // If location changed significantly, update UI
+          if (_workerPosition != null) {
+            _updateMarkers(_workerPosition!);
+            _updatePolyline(_workerPosition!);
+          }
+        }
       }
+
+      setState(() {
+        _jobStatus = status;
+        if (status == 'workStarted') {
+          final startedAt = data['jobStartedAt'];
+          if (startedAt is Timestamp) {
+            _jobStartedAt = startedAt.toDate();
+            if (!_ticker.isActive) _ticker.start();
+          }
+        } else if (status == 'completed') {
+           if (_ticker.isActive) _ticker.stop();
+        }
+      });
     });
   }
 
@@ -196,8 +240,8 @@ class _WorkerNavigationScreenState extends State<WorkerNavigationScreen> {
 
   /// Launch Google Maps with turn-by-turn navigation
   Future<void> _openGoogleMapsNavigation() async {
-    final lat = widget.job.customerLat;
-    final lng = widget.job.customerLng;
+    final lat = _customerLatLng.latitude;
+    final lng = _customerLatLng.longitude;
     final url = Uri.parse(
       'google.navigation:q=$lat,$lng&mode=d',
     );
@@ -244,6 +288,14 @@ class _WorkerNavigationScreenState extends State<WorkerNavigationScreen> {
       debugPrint('Error marking arrived: $e');
       setState(() => _isArriving = false);
     }
+  }
+
+  /// Format timer seconds to human-readable
+  String _formatTimer(int seconds) {
+    final h = (seconds ~/ 3600).toString().padLeft(2, '0');
+    final m = ((seconds % 3600) ~/ 60).toString().padLeft(2, '0');
+    final s = (seconds % 60).toString().padLeft(2, '0');
+    return seconds >= 3600 ? '$h:$m:$s' : '$m:$s';
   }
 
   /// Call the customer
@@ -390,65 +442,179 @@ class _WorkerNavigationScreenState extends State<WorkerNavigationScreen> {
             ),
           ),
 
-          // ─── Bottom Action Buttons ─────────────────────────────────
+          // ─── Bottom Action Buttons / Status ───────────────────────
           Positioned(
             bottom: MediaQuery.of(context).padding.bottom + 20,
             left: 16,
             right: 16,
             child: Column(
               children: [
-                // Open Google Maps button
-                SizedBox(
-                  width: double.infinity,
-                  height: 50,
-                  child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF2563EB),
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
+                if (_jobStatus == 'inProgress') ...[
+                  // Open Google Maps button
+                  SizedBox(
+                    width: double.infinity,
+                    height: 50,
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF2563EB),
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        elevation: 4,
                       ),
-                      elevation: 4,
-                    ),
-                    onPressed: _openGoogleMapsNavigation,
-                    icon: const Icon(Icons.navigation),
-                    label: const Text(
-                      'Open Google Maps Navigation',
-                      style: TextStyle(fontWeight: FontWeight.w700),
+                      onPressed: _openGoogleMapsNavigation,
+                      icon: const Icon(Icons.navigation),
+                      label: const Text(
+                        'Open Google Maps Navigation',
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 10),
-                // Arrived button
-                SizedBox(
-                  width: double.infinity,
-                  height: 50,
-                  child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
+                  const SizedBox(height: 10),
+                  // Arrived button
+                  SizedBox(
+                    width: double.infinity,
+                    height: 50,
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        elevation: 4,
                       ),
-                      elevation: 4,
+                      onPressed: _isArriving ? null : _markArrived,
+                      icon: _isArriving
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Icon(Icons.check_circle),
+                      label: Text(
+                        _isArriving ? 'Updating...' : "I've Arrived",
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
                     ),
-                    onPressed: _isArriving ? null : _markArrived,
-                    icon: _isArriving
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
+                  ),
+                ] else if (_jobStatus == 'arrived') ...[
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.1),
+                          blurRadius: 20,
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      children: [
+                        const Icon(Icons.timer_outlined, color: Colors.orange, size: 48),
+                        const SizedBox(height: 12),
+                        const Text(
+                          'Waiting for Customer',
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Please wait for the customer to start the work on their app.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: Colors.grey.shade600),
+                        ),
+                      ],
+                    ),
+                  ),
+                ] else if (_jobStatus == 'workStarted') ...[
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.blue.withOpacity(0.1),
+                          blurRadius: 20,
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      children: [
+                        const Text(
+                          'WORK IN PROGRESS',
+                          style: TextStyle(
+                            letterSpacing: 1.2,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.blue,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          _formatTimer(_timerSeconds),
+                          style: const TextStyle(
+                            fontSize: 48,
+                            fontWeight: FontWeight.w300,
+                            fontFamily: 'monospace',
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'Timer is synced with customer',
+                          style: TextStyle(fontSize: 12, color: Colors.grey),
+                        ),
+                      ],
+                    ),
+                  ),
+                ] else if (_jobStatus == 'completed') ...[
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.green.withOpacity(0.1),
+                          blurRadius: 20,
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      children: [
+                        const Icon(Icons.check_circle, color: Colors.green, size: 48),
+                        const SizedBox(height: 12),
+                        const Text(
+                          'Job Completed!',
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 16),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: () => Navigator.pop(context),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.green,
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
                             ),
-                          )
-                        : const Icon(Icons.check_circle),
-                    label: Text(
-                      _isArriving ? 'Updating...' : "I've Arrived",
-                      style: const TextStyle(fontWeight: FontWeight.w700),
+                            child: const Text('Return Home'),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                ),
+                ],
               ],
             ),
           ),

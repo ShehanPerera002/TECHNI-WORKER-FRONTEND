@@ -76,7 +76,7 @@ class LocationService {
     });
   }
 
-  /// High-frequency tracking for active navigation (10m filter, 5s interval)
+  /// High-frequency tracking for active navigation (0m filter, 2s interval)
   Future<void> startNavigationTracking({String? jobId}) async {
     LocationPermission permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
@@ -88,18 +88,41 @@ class LocationService {
     final workerId = FirebaseAuth.instance.currentUser?.uid;
     if (workerId == null) return;
 
-    // Cancel passive sharing if active
+    // Cancel both types of sharing if active to avoid multiple listeners
     await _positionSub?.cancel();
     _positionSub = null;
+    await _navigationSub?.cancel();
+    _navigationSub = null;
+
+    // 1. Get initial position and push immediately to liveLocations
+    try {
+      final initialPos = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+      if (jobId != null) {
+        await FirebaseFirestore.instance.collection('liveLocations').doc(jobId).set({
+          'jobRequestId': jobId,
+          'workerId': workerId,
+          'latitude': initialPos.latitude,
+          'longitude': initialPos.longitude,
+          'heading': initialPos.heading,
+          'speed': initialPos.speed,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+        debugPrint('LocationService: Initial navigation location pushed for $jobId');
+      }
+    } catch (e) {
+      debugPrint('LocationService: Error getting initial position: $e');
+    }
 
     late LocationSettings locationSettings;
 
     if (defaultTargetPlatform == TargetPlatform.android) {
       locationSettings = AndroidSettings(
         accuracy: LocationAccuracy.high,
-        distanceFilter: 10, // update every 10 meters
+        distanceFilter: 0, // Continuous updates even if static
         forceLocationManager: true,
-        intervalDuration: const Duration(seconds: 5),
+        intervalDuration: const Duration(seconds: 2), // Faster updates (2s)
         foregroundNotificationConfig: const ForegroundNotificationConfig(
           notificationText: "Navigating to customer...",
           notificationTitle: "TECHNI Navigation Active",
@@ -110,14 +133,14 @@ class LocationService {
       locationSettings = AppleSettings(
         accuracy: LocationAccuracy.high,
         activityType: ActivityType.automotiveNavigation,
-        distanceFilter: 10,
+        distanceFilter: 0,
         pauseLocationUpdatesAutomatically: false,
         allowBackgroundLocationUpdates: true,
       );
     } else {
       locationSettings = const LocationSettings(
         accuracy: LocationAccuracy.high,
-        distanceFilter: 10,
+        distanceFilter: 0,
       );
     }
 
@@ -126,6 +149,7 @@ class LocationService {
     ).listen((Position pos) {
       final geoPoint = GeoFirePoint(GeoPoint(pos.latitude, pos.longitude));
 
+      // Update worker's general location
       FirebaseFirestore.instance.collection('workers').doc(workerId).set({
         'lat': pos.latitude,
         'lng': pos.longitude,
@@ -133,6 +157,7 @@ class LocationService {
         'position': geoPoint.data,
       }, SetOptions(merge: true));
 
+      // Update active job location
       if (jobId != null) {
         FirebaseFirestore.instance.collection('liveLocations').doc(jobId).set({
           'jobRequestId': jobId,

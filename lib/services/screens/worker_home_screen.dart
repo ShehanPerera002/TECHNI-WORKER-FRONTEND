@@ -73,8 +73,13 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
   
   List<JobRequest> _newJobs = [];
   List<JobRequest> _scheduledJobs = [];
+  List<JobRequest> _ongoingJobs = [];
+  List<JobRequest> _completedJobs = [];
+  
   StreamSubscription<List<JobRequest>>? _newJobsSub;
   StreamSubscription<List<JobRequest>>? _scheduledJobsSub;
+  StreamSubscription<List<JobRequest>>? _ongoingJobsSub;
+  StreamSubscription<List<JobRequest>>? _completedJobsSub;
   StreamSubscription<QuerySnapshot>? _confirmedJobSub;
   bool _hasNavigatedToJob = false;
 
@@ -87,12 +92,22 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
   }
 
   void _subscribeToJobs() {
-    _newJobsSub = jobService.streamNewJobs().listen((jobs) {
-      if (mounted) setState(() => _newJobs = jobs);
-    });
-    _scheduledJobsSub = jobService.streamScheduledJobs().listen((jobs) {
-      if (mounted) setState(() => _scheduledJobs = jobs);
-    });
+    _newJobsSub = jobService.streamNewJobs().listen(
+      (jobs) { if (mounted) setState(() => _newJobs = jobs); },
+      onError: (e) => debugPrint('New jobs stream error: $e'),
+    );
+    _scheduledJobsSub = jobService.streamScheduledJobs().listen(
+      (jobs) { if (mounted) setState(() => _scheduledJobs = jobs); },
+      onError: (e) => debugPrint('Scheduled jobs stream error: $e'),
+    );
+    _ongoingJobsSub = jobService.streamOngoingJobs().listen(
+      (jobs) { if (mounted) setState(() => _ongoingJobs = jobs); },
+      onError: (e) => debugPrint('Ongoing jobs stream error: $e'),
+    );
+    _completedJobsSub = jobService.streamCompletedJobs().listen(
+      (jobs) { if (mounted) setState(() => _completedJobs = jobs); },
+      onError: (e) => debugPrint('Completed jobs stream error: $e'),
+    );
   }
 
   /// Listens for jobs where the customer has confirmed this worker.
@@ -171,10 +186,19 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
     }
   }
 
+  String _formatTime(int seconds) {
+    final h = (seconds ~/ 3600).toString().padLeft(2, '0');
+    final m = ((seconds % 3600) ~/ 60).toString().padLeft(2, '0');
+    final s = (seconds % 60).toString().padLeft(2, '0');
+    return seconds >= 3600 ? '$h:$m:$s' : '$m:$s';
+  }
+
   @override
   void dispose() {
     _newJobsSub?.cancel();
     _scheduledJobsSub?.cancel();
+    _ongoingJobsSub?.cancel();
+    _completedJobsSub?.cancel();
     _confirmedJobSub?.cancel();
     super.dispose();
   }
@@ -255,9 +279,13 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
               _tabs(_newJobs.length),
               const SizedBox(height: 14),
               if (tabIndex == 0)
-                _jobsSection(jobs: _newJobs, isNewJobs: true)
+                _jobsSection(jobs: _newJobs, type: 'new')
+              else if (tabIndex == 1)
+                _jobsSection(jobs: _scheduledJobs, type: 'scheduled')
+              else if (tabIndex == 2)
+                _jobsSection(jobs: _ongoingJobs, type: 'ongoing')
               else
-                _jobsSection(jobs: _scheduledJobs, isNewJobs: false),
+                _jobsSection(jobs: _completedJobs, type: 'completed'),
             ],
           ),
         ),
@@ -379,26 +407,31 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
   }
 
   Widget _tabs(int newJobCount) {
-    return Row(
-      children: [
-        Expanded(
-          child: _tabButton(
-            'New Job Requests',
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          _tabButton(
+            'New Jobs',
             tabIndex == 0,
+            index: 0,
             badge: newJobCount,
           ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(child: _tabButton('Scheduled Jobs', tabIndex == 1)),
-      ],
+          const SizedBox(width: 8),
+          _tabButton('Scheduled', tabIndex == 1, index: 1),
+          const SizedBox(width: 8),
+          _tabButton('Ongoing', tabIndex == 2, index: 2),
+          const SizedBox(width: 8),
+          _tabButton('Completed', tabIndex == 3, index: 3),
+        ],
+      ),
     );
   }
 
-  Widget _tabButton(String text, bool active, {int? badge}) {
+  Widget _tabButton(String text, bool active, {required int index, int? badge}) {
     return InkWell(
       borderRadius: BorderRadius.circular(12),
-      onTap: () =>
-          setState(() => tabIndex = (text == 'New Job Requests') ? 0 : 1),
+      onTap: () => setState(() => tabIndex = index),
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
         decoration: BoxDecoration(
@@ -409,16 +442,15 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
           ),
         ),
         child: Row(
+          mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Flexible(
-              child: Text(
-                text,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontWeight: FontWeight.w700,
-                  color: active ? const Color(0xFF2563EB) : Colors.black87,
-                ),
+            Text(
+              text,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                color: active ? const Color(0xFF2563EB) : Colors.black87,
               ),
             ),
             if (badge != null) ...[
@@ -445,10 +477,31 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
     );
   }
 
-  Widget _jobsSection({required List<JobRequest> jobs, required bool isNewJobs}) {
+  Widget _jobsSection({required List<JobRequest> jobs, required String type}) {
     if (jobs.isEmpty) {
+      IconData icon;
+      String message;
+      switch (type) {
+        case 'new':
+          icon = Icons.work_outline;
+          message = 'No job requests available right now';
+          break;
+        case 'scheduled':
+          icon = Icons.calendar_month_outlined;
+          message = 'No scheduled jobs yet.';
+          break;
+        case 'ongoing':
+          icon = Icons.running_with_errors;
+          message = 'No ongoing jobs at the moment.';
+          break;
+        default:
+          icon = Icons.check_circle_outline;
+          message = 'No completed jobs yet.';
+      }
+
       return Container(
-        padding: const EdgeInsets.all(16),
+        width: double.infinity,
+        padding: const EdgeInsets.all(32),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(14),
           border: Border.all(color: Colors.black12),
@@ -456,16 +509,10 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
         ),
         child: Column(
           children: [
-            Icon(
-              isNewJobs ? Icons.work_outline : Icons.calendar_month_outlined,
-              color: Colors.black38,
-              size: 28,
-            ),
-            const SizedBox(height: 10),
+            Icon(icon, color: Colors.black38, size: 32),
+            const SizedBox(height: 12),
             Text(
-              isNewJobs
-                  ? 'No job requests available right now'
-                  : 'No scheduled jobs yet.',
+              message,
               textAlign: TextAlign.center,
               style: const TextStyle(color: Colors.black54, height: 1.4),
             ),
@@ -475,20 +522,44 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
     }
 
     return Column(
-      children: jobs.map((job) {
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 14),
-          child: Column(
-            children: [
-              _jobRequestCard(job),
-              const SizedBox(height: 12),
-              _jobInformation(job),
-              const SizedBox(height: 12),
-              _actionButtons(job, isNewJobs),
-            ],
+      children: [
+        if (type == 'completed' && jobs.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: TextButton.icon(
+              onPressed: () async {
+                final confirm = await showDialog<bool>(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    title: const Text('Clear History'),
+                    content: const Text('Are you sure you want to delete all completed job records?'),
+                    actions: [
+                      TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+                      TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete', style: TextStyle(color: Colors.red))),
+                    ],
+                  ),
+                );
+                if (confirm == true) {
+                  await jobService.clearCompletedJobs();
+                }
+              },
+              icon: const Icon(Icons.delete_sweep, color: Colors.red, size: 20),
+              label: const Text('Delete All Completed', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+            ),
           ),
-        );
-      }).toList(),
+        ...jobs.map((job) {
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 14),
+            child: Column(
+              children: [
+                _jobRequestCard(job),
+                const SizedBox(height: 12),
+                _actionButtons(job, type),
+              ],
+            ),
+          );
+        }).toList(),
+      ],
     );
   }
 
@@ -596,95 +667,9 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
     return stars;
   }
 
-  Widget _jobInformation(JobRequest job) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF7F7F7),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.black12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Job Information',
-            style: TextStyle(fontWeight: FontWeight.w800),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Icon(Icons.description, color: Color(0xFF2563EB)),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Description',
-                      style: TextStyle(fontWeight: FontWeight.w800),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      job.description ?? 'No description provided',
-                      style: const TextStyle(color: Colors.black54),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Icon(Icons.location_on, color: Color(0xFF2563EB)),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Address',
-                      style: TextStyle(fontWeight: FontWeight.w800),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Customer Location Map Pin',
-                      style: const TextStyle(color: Colors.black54),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          Container(
-            height: 150,
-            width: double.infinity,
-            decoration: BoxDecoration(
-              color: const Color(0xFFEFEFEF),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.black12),
-            ),
-            child: const Center(
-              child: Text(
-                'Map Preview (Google Map later)',
-                style: TextStyle(
-                  color: Colors.black54,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
-  Widget _actionButtons(JobRequest job, bool isNewJobs) {
-    if (isNewJobs) {
+  Widget _actionButtons(JobRequest job, String type) {
+    if (type == 'new') {
       return Row(
         children: [
           Expanded(
@@ -701,7 +686,6 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
                 onPressed: () async {
                   await jobService.acceptJob(job.id);
                   LocationService.instance.startSharing();
-                  // Stream auto-updates UI — no setState needed
                 },
                 child: const Text(
                   'Accept',
@@ -724,7 +708,6 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
                 ),
                 onPressed: () async {
                   await jobService.declineJob(job.id);
-                  // Stream auto-updates UI — no setState needed
                 },
                 child: const Text(
                   'Decline',
@@ -735,33 +718,126 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
           ),
         ],
       );
-    } else {
-      return Row(
-        children: [
-          Expanded(
-            child: SizedBox(
-              height: 44,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF2563EB),
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-                onPressed: () async {
-                  await jobService.completeJob(job.id);
-                  LocationService.instance.stopSharing();
-                  // Stream auto-updates UI — no setState needed
-                },
-                child: const Text(
-                  'Complete Job',
-                  style: TextStyle(fontWeight: FontWeight.w800),
-                ),
-              ),
+    } else if (type == 'ongoing') {
+      return SizedBox(
+        width: double.infinity,
+        height: 46,
+        child: ElevatedButton.icon(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFF2563EB),
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
             ),
           ),
-        ],
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => WorkerNavigationScreen(job: job),
+              ),
+            );
+          },
+          icon: Icon(
+            job.status == 'workStarted' ? Icons.timer : Icons.navigation,
+            size: 18,
+          ),
+          label: Text(
+            job.status == 'workStarted'
+                ? 'View Active Timer'
+                : 'Continue to Customer',
+            style: const TextStyle(fontWeight: FontWeight.w800),
+          ),
+        ),
+      );
+    } else if (type == 'completed') {
+      return Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.green.shade50,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: Colors.green.shade100),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Job Completed',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.green,
+                  ),
+                ),
+                Text(
+                  'Duration: ${job.durationSeconds != null ? _formatTime(job.durationSeconds!) : "N/A"}',
+                  style: const TextStyle(fontSize: 13, color: Colors.black54),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Earned: Rs. ${job.fare?.toStringAsFixed(2) ?? "0.00"}',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.green,
+                  ),
+                ),
+              ],
+            ),
+            const Icon(Icons.check_circle, color: Colors.green),
+          ],
+        ),
+      );
+    } else {
+      // Scheduled (workerFound or customerConfirmed)
+      if (job.status == 'customerConfirmed') {
+        return SizedBox(
+          width: double.infinity,
+          height: 46,
+          child: ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF22C55E),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => WorkerNavigationScreen(job: job),
+                ),
+              );
+            },
+            icon: const Icon(Icons.navigation, size: 18),
+            label: const Text(
+              'Start Navigation',
+              style: TextStyle(fontWeight: FontWeight.w800),
+            ),
+          ),
+        );
+      }
+
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: Colors.amber.shade50,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: Colors.amber.shade200),
+        ),
+        child: Text(
+          'Waiting for customer confirmation...',
+          style: TextStyle(
+            color: Colors.amber.shade900,
+            fontWeight: FontWeight.w600,
+            fontSize: 13,
+          ),
+        ),
       );
     }
   }

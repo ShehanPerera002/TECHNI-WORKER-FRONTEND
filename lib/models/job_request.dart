@@ -16,7 +16,7 @@ class JobRequest {
   final List<String> notifiedWorkerIds;
   final List<String> rejectedWorkerIds;
   final double? fare;
-  final int? duration;
+  final int? durationSeconds;
   final DateTime createdAt;
   final DateTime? workerAcceptedAt;
   final DateTime? customerConfirmedAt;
@@ -41,7 +41,7 @@ class JobRequest {
     this.notifiedWorkerIds = const [],
     this.rejectedWorkerIds = const [],
     this.fare,
-    this.duration,
+    this.durationSeconds,
     required this.createdAt,
     this.workerAcceptedAt,
     this.customerConfirmedAt,
@@ -101,7 +101,7 @@ class JobRequest {
       notifiedWorkerIds: List<String>.from(data['notifiedWorkerIds'] ?? []),
       rejectedWorkerIds: List<String>.from(data['rejectedWorkerIds'] ?? []),
       fare: (data['fare'] as num?)?.toDouble(),
-      duration: data['duration'] as int?,
+      durationSeconds: data['durationSeconds'] as int?,
       createdAt: parseTimestamp(data['createdAt']),
       workerAcceptedAt: parseNullableTimestamp(data['workerAcceptedAt']),
       customerConfirmedAt: parseNullableTimestamp(data['customerConfirmedAt']),
@@ -127,7 +127,7 @@ class JobRequest {
       'notifiedWorkerIds': notifiedWorkerIds,
       'rejectedWorkerIds': rejectedWorkerIds,
       'fare': fare,
-      'duration': duration,
+      'durationSeconds': durationSeconds,
       'createdAt': Timestamp.fromDate(createdAt),
       'workerAcceptedAt': workerAcceptedAt != null ? Timestamp.fromDate(workerAcceptedAt!) : null,
       'customerConfirmedAt': customerConfirmedAt != null ? Timestamp.fromDate(customerConfirmedAt!) : null,
