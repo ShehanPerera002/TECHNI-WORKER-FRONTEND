@@ -36,10 +36,15 @@ class _WorkerNavigationScreenState extends State<WorkerNavigationScreen> {
   void initState() {
     super.initState();
     // Update status to inProgress
-    FirebaseFirestore.instance.collection('jobRequests').doc(widget.job.id).update({
-      'status': 'inProgress',
-      'navigationStartedAt': FieldValue.serverTimestamp(),
-    });
+    FirebaseFirestore.instance
+        .collection('jobRequests')
+        .doc(widget.job.id)
+        .update({
+          'status': 'inProgress',
+          'navigationStartedAt': FieldValue.serverTimestamp(),
+        })
+        .then((_) => debugPrint('Job status updated to inProgress'))
+        .catchError((e) => debugPrint('Error updating job status: $e'));
 
     // Start high-frequency navigation tracking with jobId
     LocationService.instance.startNavigationTracking(jobId: widget.job.id);
@@ -201,9 +206,15 @@ class _WorkerNavigationScreenState extends State<WorkerNavigationScreen> {
     );
 
     if (await canLaunchUrl(url)) {
-      await launchUrl(url);
-    } else {
+      await launchUrl(url, mode: LaunchMode.externalNonBrowserApplication);
+    } else if (await canLaunchUrl(fallbackUrl)) {
       await launchUrl(fallbackUrl, mode: LaunchMode.externalApplication);
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not launch Google Maps')),
+        );
+      }
     }
   }
 
