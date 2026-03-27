@@ -9,8 +9,10 @@ class JobRequest {
   final String status;
   final String jobType;
   final String? description;
+  final String? issueImageUrl;
   final double customerLat;
   final double customerLng;
+  final GeoPoint? customerLocation;
   final double? workerLat;
   final double? workerLng;
   final List<String> notifiedWorkerIds;
@@ -26,6 +28,11 @@ class JobRequest {
   final String? cancelReason;
   final int? rating;
   final String? review;
+  final double? distanceKm;
+  final double? distanceKmEstimate;
+  final String? distanceTextEstimate;
+  final String? etaTextEstimate;
+  final double? customerRating;
 
   JobRequest({
     required this.id,
@@ -36,8 +43,10 @@ class JobRequest {
     required this.status,
     required this.jobType,
     this.description,
+    this.issueImageUrl,
     required this.customerLat,
     required this.customerLng,
+    this.customerLocation,
     this.workerLat,
     this.workerLng,
     this.notifiedWorkerIds = const [],
@@ -53,6 +62,11 @@ class JobRequest {
     this.cancelReason,
     this.rating,
     this.review,
+    this.distanceKm,
+    this.distanceKmEstimate,
+    this.distanceTextEstimate,
+    this.etaTextEstimate,
+    this.customerRating,
   });
 
   factory JobRequest.fromFirestore(DocumentSnapshot doc) {
@@ -74,6 +88,7 @@ class JobRequest {
     // Handle GeoPoints for location
     double cLat = 0.0;
     double cLng = 0.0;
+    GeoPoint? customerLocationGeo;
     double? wLat;
     double? wLng;
 
@@ -81,6 +96,7 @@ class JobRequest {
       final geo = data['customerLocation'] as GeoPoint;
       cLat = geo.latitude;
       cLng = geo.longitude;
+      customerLocationGeo = geo;
     }
 
     if (data['workerLocation'] is GeoPoint) {
@@ -89,17 +105,28 @@ class JobRequest {
       wLng = geo.longitude;
     }
 
+    final resolvedCustomerName = (data['customerName'] ??
+            data['customer_name'] ??
+            data['customerFullName'] ??
+            data['name'])
+        ?.toString()
+        .trim();
+
     return JobRequest(
       id: doc.id,
       customerId: data['customerId'] ?? '',
-      customerName: data['customerName'] ?? '',
+      customerName: (resolvedCustomerName == null || resolvedCustomerName.isEmpty)
+          ? 'Customer'
+          : resolvedCustomerName,
       customerPhone: data['customerPhone'],
       workerId: data['workerId'],
       status: data['status'] ?? 'searching',
       jobType: data['jobType'] ?? '',
       description: data['description'],
+      issueImageUrl: data['issueImageUrl']?.toString(),
       customerLat: cLat,
       customerLng: cLng,
+      customerLocation: customerLocationGeo,
       workerLat: wLat,
       workerLng: wLng,
       notifiedWorkerIds: List<String>.from(data['notifiedWorkerIds'] ?? []),
@@ -115,18 +142,26 @@ class JobRequest {
       cancelReason: data['cancelReason'],
       rating: data['rating'] as int?,
       review: data['review'],
+      distanceKm: data['distanceKm'] is String
+          ? double.tryParse(data['distanceKm'] as String)
+          : (data['distanceKm'] as num?)?.toDouble(),
+      distanceKmEstimate: (data['distanceKmEstimate'] as num?)?.toDouble(),
+      distanceTextEstimate: data['distanceTextEstimate']?.toString(),
+      etaTextEstimate: data['etaTextEstimate']?.toString(),
+      customerRating: (data['customerRating'] as num?)?.toDouble(),
     );
   }
 
   Map<String, dynamic> toMap() {
     return {
-      'customerId': customerId,
-      'customerName': customerName,
+      'customerId': customerId, // ✅ MUST be from customers collection ID
+      'customerName': customerName, // ✅ MUST be latest from customers collection
       'customerPhone': customerPhone,
       'workerId': workerId,
       'status': status,
       'jobType': jobType,
       'description': description,
+      'issueImageUrl': issueImageUrl,
       'customerLocation': GeoPoint(customerLat, customerLng),
       if (workerLat != null && workerLng != null)
         'workerLocation': GeoPoint(workerLat!, workerLng!),
@@ -143,6 +178,11 @@ class JobRequest {
       'cancelReason': cancelReason,
       'rating': rating,
       'review': review,
+      'distanceKm': distanceKm,
+      'distanceKmEstimate': distanceKmEstimate,
+      'distanceTextEstimate': distanceTextEstimate,
+      'etaTextEstimate': etaTextEstimate,
+      'customerRating': customerRating,
     };
   }
 }
