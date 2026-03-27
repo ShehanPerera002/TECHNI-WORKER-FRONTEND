@@ -34,9 +34,9 @@ class LocationService {
     if (defaultTargetPlatform == TargetPlatform.android) {
       locationSettings = AndroidSettings(
         accuracy: LocationAccuracy.high,
-        distanceFilter: 3000, // update every 3 kilometers
+        distanceFilter: 0, // ✅ 0m = continuous updates every 5 seconds
         forceLocationManager: true,
-        intervalDuration: const Duration(seconds: 10),
+        intervalDuration: const Duration(seconds: 5), // Updates every 5 seconds
         foregroundNotificationConfig: const ForegroundNotificationConfig(
           notificationText: "Location is streaming in the background",
           notificationTitle: "TECHNI Background Service",
@@ -47,14 +47,14 @@ class LocationService {
       locationSettings = AppleSettings(
         accuracy: LocationAccuracy.high,
         activityType: ActivityType.fitness,
-        distanceFilter: 3000,
+        distanceFilter: 0, // ✅ 0m = continuous updates every 5 seconds
         pauseLocationUpdatesAutomatically: false,
         allowBackgroundLocationUpdates: true,
       );
     } else {
       locationSettings = const LocationSettings(
         accuracy: LocationAccuracy.high,
-        distanceFilter: 3000,
+        distanceFilter: 0, // ✅ Continuous updates to Firestore (every interval)
       );
     }
 
@@ -65,6 +65,8 @@ class LocationService {
       // Build a GeoFirePoint — this generates the GeoHash + GeoPoint in one call
       final geoPoint = GeoFirePoint(GeoPoint(pos.latitude, pos.longitude));
 
+      debugPrint('[LOCATION] Updating position: ${pos.latitude}, ${pos.longitude}');
+      
       FirebaseFirestore.instance.collection('workers').doc(workerId).set({
         'lat': pos.latitude,
         'lng': pos.longitude,
