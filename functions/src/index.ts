@@ -134,6 +134,32 @@ export const onWorkerTokenUpdated = onDocumentUpdated(
   }
 );
 
+// ─── Cloud Function: Enforce worker verification status from wallet balance ───
+export const onWorkerWalletUpdated = onDocumentUpdated(
+  "workers/{workerId}",
+  async (event) => {
+    const before = event.data?.before.data();
+    const after = event.data?.after.data();
+    if (!before || !after) return;
+
+    const afterWallet = Number(after["walletBalance"] ?? 0);
+
+    const expectedStatus = afterWallet < -2000 ? "blocked" : "verified";
+    const currentStatus = String(after["verificationStatus"] ?? "").toLowerCase();
+
+    if (currentStatus === expectedStatus) return;
+
+    await event.data?.after.ref.set(
+      { verificationStatus: expectedStatus },
+      { merge: true }
+    );
+
+    console.log(
+      `Worker ${event.params.workerId}: wallet=${afterWallet}, verificationStatus -> ${expectedStatus}`
+    );
+  }
+);
+
 // ─── Cloud Function: Notify worker when customer confirms them ────────────────
 export const onJobConfirmed = onDocumentUpdated(
   "jobs/{jobId}",
