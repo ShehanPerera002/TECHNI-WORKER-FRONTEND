@@ -1,5 +1,6 @@
 class AppAssets {
   static const String welcomeLogo = 'assets/images/welcome_screen_logo.png';
+    static const String techniLogo = 'assets/images/techni logo.png';
   static const String welcomePage = 'assets/images/welcome_page.png';
   static const String createProfilePage =
       'assets/images/create_your_profile_page.png';
