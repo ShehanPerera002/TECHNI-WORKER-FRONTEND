@@ -8,10 +8,10 @@ import '../services/screens/otp_verification_screen.dart';
 import '../services/screens/verified_screen.dart';
 import '../services/screens/create_profile_screen.dart';
 import '../services/screens/select_category_screen.dart';
-import '../services/screens/worker_home_screen.dart';
 import '../services/screens/terms_screen.dart';
 import '../services/screens/privacy_screen.dart';
 import '../services/screens/pending_verification_screen.dart'; 
+import '../main.dart';
 
 final Map<String, WidgetBuilder> appRoutes = {
   // IMPORTANT: The '/' route is handled by AuthWrapper in main.dart
@@ -51,5 +51,5 @@ final Map<String, WidgetBuilder> appRoutes = {
   '/terms': (context) => const TermsScreen(),
   '/privacy': (context) => const PrivacyScreen(),
   '/pending': (context) => const PendingVerificationScreen(),
-  '/home': (context) => const WorkerHomeScreen(),
+  '/home': (context) => const AuthWrapper(),
 };
